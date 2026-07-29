@@ -269,6 +269,51 @@ async function refreshCoverageForPost(supabase, post) {
     };
   }));
   await supabase.from('world_coverage_cache').upsert(results, { onConflict: 'post_id,region' });
+  await refreshClaimsForPost(supabase, post, results.filter((r) => r.matched));
+}
+
+/* ---- claim-level "who skipped what": which outlets share the same specific angle,
+   using a free-tier open-source model (Llama 3.3 via Groq) instead of a paid API. ---- */
+async function extractClaims(matchedResults) {
+  const groqKey = Deno.env.get('GROQ_API_KEY');
+  if (!groqKey || matchedResults.length < 2) return [];
+  const listing = matchedResults.map((r) => `[${r.source}] ${r.item_title}`).join('\n');
+  const prompt =
+    '다음은 같은 사건을 다룬 여러 언론사의 기사 제목입니다.\n\n' + listing +
+    '\n\n이 제목들에서 서로 다른 핵심 주장이나 초점을 3~5개 뽑고, 각각을 어느 언론사([...] 안의 이름)가 다뤘는지 표시하세요. ' +
+    '반드시 다음 JSON 형식으로만 답하세요: {"claims":[{"claim":"한 문장 요약","outlets":["언론사명", ...]}]}';
+  try {
+    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + groqKey },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+      }),
+    });
+    const data = await r.json();
+    const parsed = JSON.parse(data.choices[0].message.content);
+    return Array.isArray(parsed.claims) ? parsed.claims : [];
+  } catch {
+    return [];
+  }
+}
+async function refreshClaimsForPost(supabase, post, matchedResults) {
+  await supabase.from('world_coverage_claims').delete().eq('post_id', post.id);
+  const claims = await extractClaims(matchedResults);
+  if (claims.length === 0) return;
+  const allSources = matchedResults.map((r) => r.source);
+  const rows = claims.map((c) => {
+    const covered = (c.outlets || []).filter((o) => allSources.includes(o));
+    return {
+      post_id: post.id, claim: c.claim,
+      outlets_covered: covered, outlets_missed: allSources.filter((s) => !covered.includes(s)),
+      updated_at: new Date().toISOString(),
+    };
+  });
+  await supabase.from('world_coverage_claims').insert(rows);
 }
 
 Deno.serve(async (req) => {

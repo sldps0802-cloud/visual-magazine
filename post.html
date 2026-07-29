@@ -195,6 +195,14 @@
     font-size:12px;padding:6px 14px;border-radius:999px;font-family:inherit;cursor:pointer;
   }
   .wc-popup-close{background:none;border:1px solid var(--surface-border);color:var(--text-muted);}
+  .claim-card{padding:12px 0;border-bottom:1px solid var(--surface-border);}
+  .claim-card:last-of-type{border-bottom:none;}
+  .claim-text{font-size:14px;font-weight:700;margin-bottom:6px;}
+  .claim-meta{font-size:12px;color:var(--text-muted);margin-bottom:8px;}
+  .claim-chips{display:flex;flex-wrap:wrap;gap:6px;}
+  .chip{font-size:11px;padding:3px 10px;border-radius:999px;border:1px solid transparent;}
+  .chip-on{background:color-mix(in srgb, #2ecc71 18%, transparent);color:#2ecc71;border-color:color-mix(in srgb, #2ecc71 40%, transparent);}
+  .chip-off{background:color-mix(in srgb, #e74c3c 14%, transparent);color:#e77c74;border-color:color-mix(in srgb, #e74c3c 35%, transparent);}
   .wc-popup-confirm{background:var(--amber);border:none;color:#fff;font-weight:700;}
 
   /* ---- engagement bar + comments ---- */
@@ -736,11 +744,34 @@
       container.innerHTML = '<div class="wc-loading">불러오는 중…</div>';
       wcLoadCoverage(post.id).then(function(results){
         wcRenderDivide(container, results);
-        wcMaybeShowPopup(results);
+        wcMaybeShowPopup(results, post.id);
       });
     });
   }
-  function wcMaybeShowPopup(results){
+  function wcLoadClaims(postId){
+    return db.from('world_coverage_claims').select('*').eq('post_id', postId).then(function(res){
+      return res.data || [];
+    });
+  }
+  function wcRenderClaims(container, claims, fallbackResults){
+    if(claims.length === 0){
+      wcRenderSkipped(container, fallbackResults);
+      return;
+    }
+    container.innerHTML = claims.map(function(c){
+      var total = c.outlets_covered.length + c.outlets_missed.length;
+      return '<div class="claim-card">' +
+        '<div class="claim-text">' + wcEscape(c.claim) + '</div>' +
+        '<div class="claim-meta">' + total + '곳 중 ' + c.outlets_covered.length + '곳에서 다룸</div>' +
+        '<div class="claim-chips">' +
+          c.outlets_covered.map(function(o){ return '<span class="chip chip-on">' + wcEscape(o) + '</span>'; }).join('') +
+          c.outlets_missed.map(function(o){ return '<span class="chip chip-off">' + wcEscape(o) + '</span>'; }).join('') +
+        '</div>' +
+      '</div>';
+    }).join('') +
+    '<div class="wc-note">주기적으로 갱신되는 결과예요.</div>';
+  }
+  function wcMaybeShowPopup(results, postId){
     var matched = results.filter(function(r){ return r.matched; });
     if(matched.length === 0) return;
     var pick = matched[0];
@@ -760,8 +791,11 @@
         popup.classList.add('expanded');
         var box = document.createElement('div');
         box.className = 'skipped-detail';
+        box.innerHTML = '<div class="wc-loading">불러오는 중…</div>';
         popup.appendChild(box);
-        wcRenderSkipped(box, results);
+        wcLoadClaims(postId).then(function(claims){
+          wcRenderClaims(box, claims, results);
+        });
         document.querySelector('.wc-popup-actions').remove();
       });
     }, 5000);
