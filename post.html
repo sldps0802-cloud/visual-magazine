@@ -331,24 +331,43 @@
     });
   }
 
-  /* ---- one-shot reveal, one block at a time in document order ---- */
+  /* ---- one-shot reveal, one block at a time in document order.
+     after a 2.5s grace period, stop making the reader wait on the queue:
+     catch up everything already scrolled past, and stop gating what's ahead. ---- */
   function wireReadingReveal(){
     var blocks = Array.from(document.querySelectorAll('.reading'));
+    var revealed = new Array(blocks.length).fill(false);
+    var fastMode = false;
     var i = 0;
+
+    function revealBlock(el, idx){
+      if(revealed[idx]) return;
+      revealed[idx] = true;
+      el.classList.add('reveal-in');
+    }
     function next(){
       if(i >= blocks.length) return;
-      var el = blocks[i++];
+      var idx = i++;
+      var el = blocks[idx];
+      if(revealed[idx]){ next(); return; }
       var io = new IntersectionObserver(function(entries){
         entries.forEach(function(entry){
           if(!entry.isIntersecting) return;
           io.unobserve(el);
-          el.classList.add('reveal-in');
-          setTimeout(next, blockRevealDuration(el));
+          revealBlock(el, idx);
+          setTimeout(next, fastMode ? 0 : blockRevealDuration(el));
         });
       }, {threshold:0.3});
       io.observe(el);
     }
     next();
+
+    setTimeout(function(){
+      fastMode = true;
+      blocks.forEach(function(el, idx){
+        if(!revealed[idx] && el.getBoundingClientRect().top < window.innerHeight) revealBlock(el, idx);
+      });
+    }, 2500);
   }
   function blockRevealDuration(el){
     if(!el.classList.contains('reading-lines')) return 600;
