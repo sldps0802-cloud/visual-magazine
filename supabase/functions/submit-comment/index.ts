@@ -148,6 +148,113 @@ function isAllowedRssUrl(urlStr) {
   }
 }
 
+/* ---- world coverage precompute: runs on a schedule (not per-visitor), caches results
+   in world_coverage_cache so post.html just reads instantly instead of live-fetching. ---- */
+import { XMLParser } from 'npm:fast-xml-parser@4';
+const xmlParser = new XMLParser({ ignoreAttributes: false });
+
+const WC_REGIONS = [
+  {name:'동아시아',   source:'South China Morning Post', feed:'https://www.scmp.com/rss/91/feed', lang:'en'},
+  {name:'중앙아시아', source:'Eurasianet',                feed:'https://eurasianet.org/rss', lang:'en'},
+  {name:'남아시아',   source:'The Hindu',                 feed:'https://www.thehindu.com/news/international/feeder/default.rss', lang:'en'},
+  {name:'동남아시아', source:'Bangkok Post',              feed:'https://www.bangkokpost.com/rss/data/topstories.xml', lang:'en'},
+  {name:'중동',       source:'Al Jazeera',                feed:'https://www.aljazeera.com/xml/rss/all.xml', lang:'en'},
+  {name:'아프리카',   source:'AllAfrica',                 feed:'https://allafrica.com/tools/headlines/rdf/latest/headlines.rdf', lang:'en'},
+  {name:'유럽',       source:'Euronews',                  feed:'https://www.euronews.com/rss?level=theme&name=news', lang:'en'},
+  {name:'아메리카',   source:'Global Voices',             feed:'https://globalvoices.org/-/world/americas/feed/', lang:'en'},
+  {name:'한국',       source:'연합뉴스',                  feed:'https://www.yna.co.kr/rss/news.xml', lang:'ko'},
+  {name:'미국',       source:'The New York Times',        feed:'https://rss.nytimes.com/services/xml/rss/nyt/World.xml', lang:'en'},
+  {name:'일본',       source:'NHK뉴스',                   feed:'https://www3.nhk.or.jp/rss/news/cat0.xml', lang:'ja'},
+];
+function wcGoogleFeedUrl(topic) {
+  return 'https://news.google.com/rss/search?q=' + encodeURIComponent(topic) + '&hl=en-US&gl=US&ceid=US:en';
+}
+const WC_STOPWORDS = {
+  the:1, a:1, an:1, of:1, to:1, in:1, on:1, for:1, and:1, or:1, is:1, are:1, was:1, were:1,
+  with:1, at:1, by:1, from:1, as:1, it:1, its:1, this:1, that:1, be:1, has:1, have:1, will:1, not:1,
+  '이':1, '그':1, '저':1, '것':1, '수':1, '등':1, '및':1, '을':1, '를':1, '은':1, '는':1, '에':1, '의':1,
+  '가':1, '과':1, '와':1, '도':1, '로':1, '으로':1, '에서':1,
+};
+function wcTokenize(text) {
+  return (text || '').toLowerCase()
+    .split(/[\s,."'?!:;()\[\]〈〉《》·\-–—]+/)
+    .filter((w) => w.length >= 3 && !WC_STOPWORDS[w]);
+}
+function wcScore(item, keywords) {
+  const haySet = new Set(wcTokenize(item.title + ' ' + (item.description || '')));
+  return keywords.filter((k) => haySet.has(k)).length;
+}
+function wcDetectLang(text) { return /[가-힣]/.test(text) ? 'ko' : 'en'; }
+async function wcTranslate(text, targetLang) {
+  const srcLang = wcDetectLang(text);
+  if (srcLang === targetLang) return text;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const r = await fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text) + '&langpair=' + srcLang + '|' + targetLang, { signal: ctrl.signal });
+    const data = await r.json();
+    return data?.responseData?.translatedText || text;
+  } catch {
+    return text;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+function wcParseXml(xmlText) {
+  try {
+    const doc = xmlParser.parse(xmlText);
+    let items = doc.rss?.channel?.item || doc.feed?.entry || [];
+    if (!Array.isArray(items)) items = [items].filter(Boolean);
+    return items.map((it) => ({
+      title: String(it.title ?? '').trim(),
+      link: typeof it.link === 'string' ? it.link : (it.link?.['@_href'] || ''),
+      description: String(it.description ?? it.summary ?? '').trim(),
+    }));
+  } catch {
+    return [];
+  }
+}
+async function wcFetchRegion(feedUrl, keywords) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const r = await fetch(feedUrl, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VisualMagazineBot/1.0)' } });
+    const text = await r.text();
+    const items = wcParseXml(text);
+    const minScore = keywords.length >= 3 ? 2 : 1;
+    let best = null, bestScore = 0;
+    for (const item of items) {
+      const s = wcScore(item, keywords);
+      if (s > bestScore) { bestScore = s; best = item; }
+    }
+    return { item: best, matched: bestScore >= minScore };
+  } catch {
+    return { item: null, matched: false };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+async function refreshCoverageForPost(supabase, post) {
+  const topic = post.title || '';
+  if (wcTokenize(topic).length === 0) return;
+  const regions = WC_REGIONS.concat([{ name: '구글 뉴스', source: 'Google News', feed: wcGoogleFeedUrl(topic), lang: 'en' }]);
+  const langs = [...new Set(regions.map((r) => r.lang))];
+  const keywordsByLang = {};
+  for (const lang of langs) {
+    const translated = await wcTranslate(topic, lang);
+    keywordsByLang[lang] = wcTokenize(translated);
+  }
+  const results = await Promise.all(regions.map(async (region) => {
+    const { item, matched } = await wcFetchRegion(region.feed, keywordsByLang[region.lang] || wcTokenize(topic));
+    return {
+      post_id: post.id, region: region.name, source: region.source,
+      matched, item_title: item?.title || null, item_link: item?.link || null,
+      updated_at: new Date().toISOString(),
+    };
+  }));
+  await supabase.from('world_coverage_cache').upsert(results, { onConflict: 'post_id,region' });
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
 
@@ -161,6 +268,22 @@ Deno.serve(async (req) => {
       const r = await fetch(feedUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VisualMagazineBot/1.0)' } });
       const text = await r.text();
       return new Response(text, { headers: { ...CORS_HEADERS, 'Content-Type': 'text/plain; charset=utf-8' } });
+    }
+
+    // 스케줄러(cron)가 주기적으로 호출 - 방문자 요청이 아니라 VPN/국가 판별은 필요 없음
+    if (body.action === 'refresh-coverage') {
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL'),
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
+      );
+      const { data: posts, error: postsError } = await supabaseAdmin.from('posts').select('id,title');
+      if (postsError) throw postsError;
+      for (const post of posts || []) {
+        await refreshCoverageForPost(supabaseAdmin, post);
+      }
+      return new Response(JSON.stringify({ ok: true, refreshed: (posts || []).length }), {
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
     }
 
     const ip = detectIp(req);

@@ -661,142 +661,29 @@
     av.appendChild(panel);
   });
 
-  /* ---- world coverage: live RSS by region, matched to this post's title ---- */
-  var WC_REGIONS = [
-    {name:'동아시아',   source:'South China Morning Post', feed:'https://www.scmp.com/rss/91/feed', lang:'en'},
-    {name:'중앙아시아', source:'Eurasianet',                feed:'https://eurasianet.org/rss', lang:'en'},
-    {name:'남아시아',   source:'The Hindu',                 feed:'https://www.thehindu.com/news/international/feeder/default.rss', lang:'en'},
-    {name:'동남아시아', source:'Bangkok Post',              feed:'https://www.bangkokpost.com/rss/data/topstories.xml', lang:'en'},
-    {name:'중동',       source:'Al Jazeera',                feed:'https://www.aljazeera.com/xml/rss/all.xml', lang:'en'},
-    {name:'아프리카',   source:'AllAfrica',                 feed:'https://allafrica.com/tools/headlines/rdf/latest/headlines.rdf', lang:'en'},
-    {name:'유럽',       source:'Euronews',                  feed:'https://www.euronews.com/rss?level=theme&name=news', lang:'en'},
-    {name:'아메리카',   source:'Global Voices',             feed:'https://globalvoices.org/-/world/americas/feed/', lang:'en'},
-    {name:'한국',       source:'연합뉴스',                  feed:'https://www.yna.co.kr/rss/news.xml', lang:'ko'},
-    {name:'미국',       source:'The New York Times',        feed:'https://rss.nytimes.com/services/xml/rss/nyt/World.xml', lang:'en'},
-    {name:'일본',       source:'NHK뉴스',                   feed:'https://www3.nhk.or.jp/rss/news/cat0.xml', lang:'ja'}
-  ];
-  var WC_PROXY = 'https://api.allorigins.win/raw?url=';
-  var WC_FN_URL = SUPABASE_URL + '/functions/v1/super-action';
-  // 서버(Edge Function)로 직접 가져오기를 우선 시도, 실패하면 공개 CORS 프록시로 대체
-  function wcFetchXml(url){
-    var ctrl = new AbortController();
-    var timer = setTimeout(function(){ ctrl.abort(); }, 8000);
-    return fetch(WC_FN_URL, {
-      method: 'POST', signal: ctrl.signal,
-      headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY },
-      body: JSON.stringify({ action: 'fetch-rss', url: url })
-    }).then(function(r){ clearTimeout(timer); if(!r.ok) throw new Error('edge fn failed'); return r.text(); })
-      .catch(function(){
-        var ctrl2 = new AbortController();
-        var timer2 = setTimeout(function(){ ctrl2.abort(); }, 8000);
-        return fetch(WC_PROXY + encodeURIComponent(url), {signal: ctrl2.signal})
-          .then(function(r){ clearTimeout(timer2); return r.text(); });
-      });
-  }
-  var WC_GOOGLE = {name:'구글 뉴스', source:'Google News', lang:'en'};
-  function wcGoogleFeedUrl(topic){
-    return 'https://news.google.com/rss/search?q=' + encodeURIComponent(topic) + '&hl=en-US&gl=US&ceid=US:en';
-  }
-
-  function wcDetectLang(text){
-    return /[가-힣]/.test(text) ? 'ko' : 'en';
-  }
-  var wcTranslateCache = {};
-  function wcTranslate(text, targetLang){
-    var srcLang = wcDetectLang(text);
-    if(srcLang === targetLang) return Promise.resolve(text);
-    var key = srcLang + '|' + targetLang + ':' + text;
-    if(wcTranslateCache[key]) return wcTranslateCache[key];
-    var ctrl = new AbortController();
-    var timer = setTimeout(function(){ ctrl.abort(); }, 8000);
-    wcTranslateCache[key] = fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text) + '&langpair=' + srcLang + '|' + targetLang, {signal: ctrl.signal})
-      .then(function(r){ clearTimeout(timer); return r.json(); })
-      .then(function(data){
-        return (data && data.responseData && data.responseData.translatedText) ? data.responseData.translatedText : text;
-      })
-      .catch(function(){ clearTimeout(timer); return text; });
-    return wcTranslateCache[key];
-  }
-  var WC_STOPWORDS = {
-    'the':1,'a':1,'an':1,'of':1,'to':1,'in':1,'on':1,'for':1,'and':1,'or':1,'is':1,'are':1,'was':1,'were':1,
-    'with':1,'at':1,'by':1,'from':1,'as':1,'it':1,'its':1,'this':1,'that':1,'be':1,'has':1,'have':1,'will':1,'not':1,
-    '이':1,'그':1,'저':1,'것':1,'수':1,'등':1,'및':1,'을':1,'를':1,'은':1,'는':1,'에':1,'의':1,'가':1,'과':1,'와':1,'도':1,'로':1,'으로':1,'에서':1
-  };
-  function wcTokenize(text){
-    return (text || '').toLowerCase()
-      .split(/[\s,."'?!:;()\[\]〈〉《》·\-–—]+/)
-      .filter(function(w){ return w.length >= 3 && !WC_STOPWORDS[w]; });
-  }
-  function wcKeywords(text){
-    return wcTokenize(text);
-  }
-  function wcScore(item, keywords){
-    var haySet = {};
-    wcTokenize(item.title + ' ' + (item.description || '')).forEach(function(w){ haySet[w] = true; });
-    var score = 0;
-    keywords.forEach(function(k){ if(haySet[k]) score++; });
-    return score;
-  }
+  /* ---- world coverage: reads results a background job (refresh-coverage Edge Function,
+     run on a schedule) already computed and cached - no live RSS fetching on page view. ---- */
   function wcEscape(s){
     return (s || '').replace(/[&<>"']/g, function(c){
       return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
     });
   }
-  function wcParseXML(xmlText){
-    var doc = new DOMParser().parseFromString(xmlText, 'text/xml');
-    if(doc.querySelector('parsererror')) return [];
-    var nodes = doc.querySelectorAll('item');
-    if(nodes.length === 0) nodes = doc.querySelectorAll('entry'); // Atom fallback
-    return Array.from(nodes).map(function(el){
-      var titleEl = el.querySelector('title');
-      var linkEl = el.querySelector('link');
-      var descEl = el.querySelector('description') || el.querySelector('summary');
-      var link = linkEl ? (linkEl.getAttribute('href') || linkEl.textContent) : '';
-      return {
-        title: titleEl ? titleEl.textContent.trim() : '',
-        link: (link || '').trim(),
-        description: descEl ? descEl.textContent.trim() : ''
-      };
+  var wcCoverageCache = {};
+  function wcLoadCoverage(postId){
+    if(wcCoverageCache[postId]) return wcCoverageCache[postId];
+    wcCoverageCache[postId] = db.from('world_coverage_cache').select('*').eq('post_id', postId).then(function(res){
+      return (res.data || []).map(function(r){
+        return { region:r.region, source:r.source, matched:r.matched, item: r.matched ? {title:r.item_title, link:r.item_link} : null };
+      });
     });
-  }
-  var wcPromiseCache = {};
-  function wcFetchOne(region, keywords){
-    return wcFetchXml(region.feed)
-      .then(function(xmlText){
-        var items = wcParseXML(xmlText);
-        var minScore = keywords.length >= 3 ? 2 : 1;
-        var best = null, bestScore = 0;
-        items.forEach(function(item){
-          var s = wcScore(item, keywords);
-          if(s > bestScore){ bestScore = s; best = item; }
-        });
-        return {region:region.name, source:region.source, item:best, matched: bestScore >= minScore};
-      })
-      .catch(function(){ return {region:region.name, source:region.source, item:null, matched:false, failed:true}; });
-  }
-  function wcFetchAll(topic, onProgress){
-    if(wcPromiseCache[topic]) return wcPromiseCache[topic];
-    var regions = WC_REGIONS.concat([{name:WC_GOOGLE.name, source:WC_GOOGLE.source, feed:wcGoogleFeedUrl(topic), lang:WC_GOOGLE.lang}]);
-    var langs = regions.map(function(r){ return r.lang; }).filter(function(v, i, a){ return a.indexOf(v) === i; });
-    wcPromiseCache[topic] = Promise.all(langs.map(function(lang){
-      return wcTranslate(topic, lang).then(function(t){ return [lang, wcKeywords(t)]; });
-    })).then(function(pairs){
-      var keywordsByLang = {};
-      pairs.forEach(function(p){ keywordsByLang[p[0]] = p[1]; });
-      var total = regions.length;
-      var done = 0;
-      return Promise.all(regions.map(function(region){
-        return wcFetchOne(region, keywordsByLang[region.lang] || wcKeywords(topic)).then(function(r){
-          done++;
-          if(onProgress) onProgress(done, total);
-          return r;
-        });
-      }));
-    });
-    return wcPromiseCache[topic];
+    return wcCoverageCache[postId];
   }
 
   function wcRenderDivide(container, results){
+    if(results.length === 0){
+      container.innerHTML = '<div class="wc-empty">아직 확인 중이에요. 잠시 후 다시 열어보세요.</div>';
+      return;
+    }
     var matched = results.filter(function(r){ return r.matched; });
     if(matched.length === 0){
       container.innerHTML = '<div class="wc-empty">지금은 이 주제와 일치하는 해외 보도를 찾지 못했어요.</div>';
@@ -813,9 +700,13 @@
         '</div>';
       }).join('') +
       '</div>' +
-      '<div class="wc-note">발행 시점에 가져온 결과예요. 시간이 지나면 자동으로 새로고침돼요.</div>';
+      '<div class="wc-note">주기적으로 갱신되는 결과예요.</div>';
   }
   function wcRenderSkipped(container, results){
+    if(results.length === 0){
+      container.innerHTML = '<div class="wc-empty">아직 확인 중이에요. 잠시 후 다시 열어보세요.</div>';
+      return;
+    }
     var total = results.length;
     var covered = results.filter(function(r){ return r.matched; });
     var missed = results.filter(function(r){ return !r.matched; });
@@ -836,12 +727,10 @@
         }).join('') +
         '</ul>' +
       '</div>' +
-      '<div class="wc-note">발행 시점에 가져온 결과예요. 시간이 지나면 자동으로 새로고침돼요.</div>';
+      '<div class="wc-note">주기적으로 갱신되는 결과예요.</div>';
   }
 
   function wireWorldCoverage(post, divideEl, skippedEl){
-    var topic = post.title || '';
-    if(wcKeywords(topic).length === 0) return;
     [divideEl, skippedEl].forEach(function(el){
       if(!el) return;
       var isDivide = el.classList.contains('divide');
@@ -849,11 +738,8 @@
         if(!el.open || el.dataset.wcLoading) return;
         el.dataset.wcLoading = '1';
         var container = el.querySelector('.divide-detail') || el.querySelector('.skipped-detail');
-        container.innerHTML = '<div class="wc-loading">전 세계 언론을 확인하는 중… (0/' + (WC_REGIONS.length + 1) + ')</div>';
-        wcFetchAll(topic, function(done, total){
-          var loading = container.querySelector('.wc-loading');
-          if(loading) loading.textContent = '전 세계 언론을 확인하는 중… (' + done + '/' + total + ')';
-        }).then(function(results){
+        container.innerHTML = '<div class="wc-loading">불러오는 중…</div>';
+        wcLoadCoverage(post.id).then(function(results){
           if(isDivide) wcRenderDivide(container, results); else wcRenderSkipped(container, results);
         });
       });
