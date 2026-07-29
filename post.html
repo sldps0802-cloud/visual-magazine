@@ -204,18 +204,33 @@
     font-size:12px;padding:4px 10px;border-radius:999px;font-family:inherit;cursor:pointer;
     background:var(--surface);border:1px solid var(--surface-border);color:var(--text);
   }
+  .info-btn{
+    width:18px;height:18px;border-radius:50%;flex:none;margin-left:auto;position:relative;
+    display:flex;align-items:center;justify-content:center;
+    background:none;border:1px solid var(--text-muted);color:var(--text-muted);
+    font-size:11px;font-family:inherit;cursor:pointer;padding:0;
+  }
+  .info-tooltip{
+    position:absolute;top:calc(100% + 8px);right:0;z-index:3;width:220px;
+    background:#20120a;color:#f5e9da;font-size:12px;line-height:1.6;text-align:left;
+    padding:12px 14px;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.3);
+  }
+  .comment-input-row{
+    display:flex;align-items:center;gap:6px;
+    background:var(--surface);border:1px solid var(--surface-border);border-radius:999px;
+    padding:6px 6px 6px 16px;margin-bottom:10px;
+  }
   .comment-input{
-    width:100%;min-height:64px;resize:vertical;
-    background:var(--surface);border:1px solid var(--surface-border);border-radius:12px;
-    padding:12px 14px;color:var(--text);font-family:inherit;font-size:14px;line-height:1.6;
-    outline:none;margin-bottom:10px;
+    flex:1;min-width:0;border:none;background:none;outline:none;
+    color:var(--text);font-family:inherit;font-size:14px;padding:8px 0;
   }
   .comment-submit{
-    float:right;padding:9px 18px;border-radius:999px;border:none;
-    background:var(--btn-bg);color:var(--btn-text);font-size:13px;font-weight:700;
-    cursor:pointer;font-family:inherit;
+    width:32px;height:32px;border-radius:50%;flex:none;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--amber);color:#fff;border:none;cursor:pointer;
   }
-  .comment-msg{font-size:12px;color:var(--amber);clear:both;padding-top:10px;min-height:14px;}
+  .comment-submit svg{width:16px;height:16px;}
+  .comment-msg{font-size:12px;color:var(--amber);padding-left:16px;min-height:14px;}
 
   .comment-list{list-style:none;clear:both;}
   .comment-row{display:flex;gap:10px;padding:14px 0;border-bottom:1px solid var(--surface-border);}
@@ -363,9 +378,14 @@
           '<div class="comment-avatar" id="my-avatar"></div>' +
           '<span class="comment-nickname" id="my-nickname"></span>' +
           '<button class="reroll-btn" id="reroll-btn">랜덤 변경</button>' +
+          '<button class="info-btn" id="info-btn" aria-label="안내">i</button>' +
         '</div>' +
-        '<textarea class="comment-input" id="comment-input" placeholder="댓글을 남겨보세요" maxlength="500"></textarea>' +
-        '<button class="comment-submit" id="comment-submit">댓글 남기기</button>' +
+        '<div class="comment-input-row">' +
+          '<input type="text" class="comment-input" id="comment-input" placeholder="댓글을 남겨보세요" maxlength="500">' +
+          '<button class="comment-submit" id="comment-submit" aria-label="댓글 남기기">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>' +
+          '</button>' +
+        '</div>' +
         '<div class="comment-msg" id="comment-msg"></div>' +
       '</div>' +
       '<ul class="comment-list" id="comment-list"></ul>';
@@ -526,6 +546,25 @@
     document.getElementById('reroll-btn').addEventListener('click', function(){
       rollIdentity();
       paintIdentity();
+    });
+
+    document.getElementById('info-btn').addEventListener('click', function(e){
+      e.stopPropagation();
+      var existing = this.querySelector('.info-tooltip');
+      if(existing){ existing.remove(); return; }
+      var tip = document.createElement('div');
+      tip.className = 'info-tooltip';
+      tip.textContent = '입력한 댓글은 수정·삭제가 어려워요. 접속 국가가 함께 표시돼요. 부적절한 내용은 삭제될 수 있어요.';
+      this.appendChild(tip);
+    });
+    document.addEventListener('click', function(e){
+      if(e.target.closest && e.target.closest('#info-btn')) return;
+      var tip = document.querySelector('.info-tooltip');
+      if(tip) tip.remove();
+    });
+
+    document.getElementById('comment-input').addEventListener('keydown', function(e){
+      if(e.key === 'Enter'){ e.preventDefault(); document.getElementById('comment-submit').click(); }
     });
 
     var likeBtn = document.getElementById('like-btn');
