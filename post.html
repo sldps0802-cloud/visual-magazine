@@ -75,8 +75,11 @@
   .body-content code{background:var(--surface);padding:2px 6px;border-radius:4px;font-size:14px;}
   .body-content img{max-width:100%;border-radius:10px;}
 
-  /* ---- scroll-driven text-sweep reveal (matches article.html) ---- */
-  .body-content .reading{opacity:0;}
+  /* ---- one-shot text-sweep reveal on enter (bouncy ease) ---- */
+  .body-content .reading{
+    opacity:0;transform:translateY(16px);
+    transition:opacity .6s cubic-bezier(.34,1.56,.64,1),transform .6s cubic-bezier(.34,1.56,.64,1),background-position .8s cubic-bezier(.34,1.56,.64,1);
+  }
   .body-content .reading:is(p,h1,h2,h3,h4,blockquote){
     background-image:linear-gradient(90deg, var(--text) 50%, var(--bg-mid) 50%);
     background-size:200% 100%;
@@ -84,6 +87,9 @@
     -webkit-background-clip:text;
             background-clip:text;
     color:transparent;
+  }
+  .body-content .reading.reveal-in{
+    opacity:1;transform:translateY(0);background-position:0% 0;
   }
 
   .not-found{padding:80px 0;text-align:center;color:var(--text-muted);}
@@ -285,24 +291,20 @@
     document.title = post.title + ' · 비주얼매거진';
 
     wireWorldCoverage(post, main.querySelector('.divide'), main.querySelector('.skipped'));
-    updateReading();
+    wireReadingReveal();
   }
 
-  /* ---- scroll-driven text-sweep reveal (matches article.html) ---- */
-  var READING_LINE = 0.82, READING_SPAN = 220;
-  function updateReading(){
-    document.querySelectorAll('.reading').forEach(function(el){
-      var t = (window.innerHeight*READING_LINE - el.getBoundingClientRect().top) / READING_SPAN;
-      t = Math.max(0, Math.min(1, t));
-      el.style.opacity = t;
-      el.style.transform = 'translateY(' + (1-t)*16 + 'px)';
-      el.style.backgroundPosition = (100*(1-t)) + '% 0';
-    });
+  /* ---- one-shot text-sweep reveal: triggers once when a block enters view ---- */
+  function wireReadingReveal(){
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(entry){
+        if(!entry.isIntersecting) return;
+        entry.target.classList.add('reveal-in');
+        io.unobserve(entry.target);
+      });
+    }, {threshold:0.3});
+    document.querySelectorAll('.reading').forEach(function(el){ io.observe(el); });
   }
-  var readingTicking = false;
-  window.addEventListener('scroll', function(){
-    if(!readingTicking){ requestAnimationFrame(function(){ updateReading(); readingTicking = false; }); readingTicking = true; }
-  }, {passive:true});
 
   /* ---- world coverage: live RSS by region, matched to this post's title ---- */
   var WC_REGIONS = [
