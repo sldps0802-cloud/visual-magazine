@@ -228,7 +228,32 @@ function wcParseXml(xmlText) {
     return [];
   }
 }
-async function wcFetchRegion(feedUrl, keywords) {
+async function verifySameTopic(topic, candidateTitle) {
+  const groqKey = Deno.env.get('GROQ_API_KEY');
+  if (!groqKey) return true; // no key configured yet - fall back to keyword-only matching
+  try {
+    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + groqKey },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content:
+          '다음 두 제목이 같은 구체적인 사건을 다루고 있는지 확인하세요. 단어가 겹쳐도 동명이인·동음이의어 때문에 ' +
+          '전혀 다른 사건일 수 있습니다 (예: 사람 이름과 회사 이름이 같은 경우).\n' +
+          '기준: ' + topic + '\n비교 대상: ' + candidateTitle + '\n\n' +
+          '같은 사건이면 yes, 다른 사건이면 no 라고만 답하세요.' }],
+        temperature: 0,
+        max_tokens: 5,
+      }),
+    });
+    const data = await r.json();
+    const answer = (data.choices?.[0]?.message?.content || '').toLowerCase();
+    return answer.includes('yes');
+  } catch {
+    return true; // Groq failure shouldn't break matching entirely - fail open to keyword result
+  }
+}
+async function wcFetchRegion(feedUrl, keywords, topic) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 8000);
   try {
@@ -241,7 +266,11 @@ async function wcFetchRegion(feedUrl, keywords) {
       const s = wcScore(item, keywords);
       if (s > bestScore) { bestScore = s; best = item; }
     }
-    return { item: best, matched: bestScore >= minScore };
+    let matched = bestScore >= minScore;
+    // keyword overlap alone can't tell "Michelle Steel" from "British Steel" - a name/word can
+    // mean two unrelated things, so double check with the LLM before calling it a real match.
+    if (matched && best) matched = await verifySameTopic(topic, best.title);
+    return { item: best, matched };
   } catch {
     return { item: null, matched: false };
   } finally {
@@ -259,7 +288,7 @@ async function refreshCoverageForPost(supabase, post) {
     keywordsByLang[lang] = wcTokenize(translated);
   }
   const results = await Promise.all(regions.map(async (region) => {
-    const { item, matched } = await wcFetchRegion(region.feed, keywordsByLang[region.lang] || wcTokenize(topic));
+    const { item, matched } = await wcFetchRegion(region.feed, keywordsByLang[region.lang] || wcTokenize(topic), topic);
     // 한국어 화면에 보여줄 거라 원문이 외국어면 한국어로 번역해서 저장 (원문은 링크로 확인 가능)
     const displayTitle = item && region.lang !== 'ko' ? await wcTranslate(item.title, 'ko') : item?.title;
     return {
