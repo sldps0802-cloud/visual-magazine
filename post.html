@@ -199,7 +199,7 @@
         method: 'POST', keepalive: true,
         headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY },
         body: JSON.stringify({ post_id: res.data.id })
-      }).then(function(r){ document.title = 'DEBUG-OK-' + r.status; }).catch(function(e){ document.title = 'DEBUG-ERR-' + e; });
+      });
     });
   }
 
