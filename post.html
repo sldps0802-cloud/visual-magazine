@@ -487,7 +487,8 @@
     '호랑이':'🐯','늑대':'🐺','오소리':'🦡','낙타':'🐫'
   };
   var AVATAR_COLORS = ['#ffd9a8','#a8d8ff','#c9a8ff','#a8ffd0','#ffb8d0','#ffe9a8','#a8f0ff','#d0ffa8'];
-  var COMMENT_FN_URL = SUPABASE_URL + '/functions/v1/submit-comment';
+  // 대시보드에서 함수 이름이 'submit-comment'가 아니라 'super-action'으로 배포됨
+  var COMMENT_FN_URL = SUPABASE_URL + '/functions/v1/super-action';
   var myIdentity = null;
 
   function pick(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
