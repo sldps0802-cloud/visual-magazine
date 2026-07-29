@@ -17,6 +17,8 @@
     --surface-border:rgba(255,255,255,.14);
     --btn-bg:#f5e9da;
     --btn-text:#2a1206;
+    --word-step:30ms;
+    --word-cap:900ms;
   }
   :root[data-theme="light"]{
     --gold:#c97a2e;
@@ -88,7 +90,7 @@
   .body-content .word{display:inline-block;color:var(--text-muted);opacity:.5;}
   .body-content .reading-lines.reveal-in .word{
     animation:word-reveal .5s cubic-bezier(.34,1.56,.64,1) both;
-    animation-delay:min(calc(var(--i) * 30ms), 900ms);
+    animation-delay:min(calc(var(--i) * var(--word-step)), var(--word-cap));
   }
   /* past the grace period: no gradient sweep, just a quick smooth fade to normal color */
   .body-content .reading-lines.reveal-instant .word{
@@ -338,45 +340,51 @@
   }
 
   /* ---- one-shot reveal, one block at a time in document order.
-     after a 2.5s grace period, drop the scroll/queue logic entirely and
-     just show whatever's left in its normal color, no animation. ---- */
+     the cutover to "no wait, instant" lives INSIDE this same queue (not a
+     separate timer), so it can never jump ahead of a block that's still
+     mid-gradient: from 1s the gradient itself speeds up, and only a block
+     whose turn comes up at/after 1.7s skips the gradient entirely. ---- */
   function wireReadingReveal(){
     var blocks = Array.from(document.querySelectorAll('.reading'));
-    var revealed = new Array(blocks.length).fill(false);
-    var stopped = false;
-    var activeIO = null;
+    var startTime = Date.now();
     var i = 0;
 
     function next(){
-      if(stopped || i >= blocks.length) return;
+      if(i >= blocks.length) return;
       var idx = i++;
       var el = blocks[idx];
-      activeIO = new IntersectionObserver(function(entries){
+
+      if(Date.now() - startTime >= 1700){
+        el.classList.add('reveal-in', 'reveal-instant');
+        setTimeout(next, 0);
+        return;
+      }
+
+      var io = new IntersectionObserver(function(entries){
         entries.forEach(function(entry){
           if(!entry.isIntersecting) return;
-          activeIO.unobserve(el);
-          revealed[idx] = true;
+          io.unobserve(el);
+          if(Date.now() - startTime >= 1000) setGradientSpeed(true);
           el.classList.add('reveal-in');
           setTimeout(next, blockRevealDuration(el));
         });
       }, {threshold:0.3});
-      activeIO.observe(el);
+      io.observe(el);
     }
     next();
-
-    setTimeout(function(){
-      stopped = true;
-      if(activeIO) activeIO.disconnect();
-      blocks.forEach(function(el, idx){
-        if(revealed[idx]) return;
-        el.classList.add('reveal-in', 'reveal-instant');
-      });
-    }, 1700);
+  }
+  var gradientFast = false;
+  function setGradientSpeed(fast){
+    if(gradientFast === fast) return;
+    gradientFast = fast;
+    document.documentElement.style.setProperty('--word-step', fast ? '6ms' : '30ms');
+    document.documentElement.style.setProperty('--word-cap', fast ? '150ms' : '900ms');
   }
   function blockRevealDuration(el){
-    if(!el.classList.contains('reading-lines')) return 600;
+    if(!el.classList.contains('reading-lines')) return gradientFast ? 200 : 600;
     var wordCount = el.querySelectorAll('.word').length;
-    return Math.min((wordCount - 1) * 30, 900) + 500 + 100;
+    var step = gradientFast ? 6 : 30, cap = gradientFast ? 150 : 900;
+    return Math.min((wordCount - 1) * step, cap) + 500 + 100;
   }
 
   /* ---- world coverage: live RSS by region, matched to this post's title ---- */
