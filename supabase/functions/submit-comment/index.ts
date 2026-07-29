@@ -186,8 +186,11 @@ function wcTokenize(text) {
     });
 }
 function wcScore(item, keywords) {
-  const haySet = new Set(wcTokenize(item.title + ' ' + (item.description || '')));
-  return keywords.filter((k) => haySet.has(k)).length;
+  // substring containment, not exact-token equality: catches compound words, inflected
+  // forms, and different word-boundary choices (e.g. "주한미국대사" vs "주한 미국대사")
+  // that would otherwise never line up as identical tokens across different outlets.
+  const hay = (item.title + ' ' + (item.description || '')).toLowerCase();
+  return keywords.filter((k) => hay.includes(k)).length;
 }
 function wcDetectLang(text) { return /[가-힣]/.test(text) ? 'ko' : 'en'; }
 async function wcTranslate(text, targetLang) {
@@ -226,7 +229,7 @@ async function wcFetchRegion(feedUrl, keywords) {
     const r = await fetch(feedUrl, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VisualMagazineBot/1.0)' } });
     const text = await r.text();
     const items = wcParseXml(text);
-    const minScore = keywords.length >= 3 ? 2 : 1;
+    const minScore = 1; // any one distinctive keyword hit counts as coverage
     let best = null, bestScore = 0;
     for (const item of items) {
       const s = wcScore(item, keywords);
