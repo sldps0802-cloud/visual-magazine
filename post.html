@@ -334,39 +334,62 @@
     });
   }
 
-  /* ---- one-shot reveal, one block at a time in document order.
-     always the same word-reveal animation, just three speed tiers ramping
-     up over time (normal -> fast -> instant) so it's one continuous
-     acceleration instead of a hard cut to a different style. lives inside
-     the same queue so a later block can never overtake one still mid-flight. ---- */
+  /* ---- reveal blocks one at a time in document order, gradient speeding up
+     as it goes (normal -> fast). at 1.7s, whatever's left (the whole rest of
+     the article, not just one block) pops to normal color together, all at
+     once - but only once whichever block is still mid-flight actually
+     finishes, so it can never visually overtake it. ---- */
   var TIERS = {
-    normal:  {step:30, cap:900, dur:500,  blockDur:600},
-    fast:    {step:6,  cap:150, dur:300,  blockDur:200},
-    instant: {step:0,  cap:0,   dur:150,  blockDur:100}
+    normal:  {step:30, cap:900, dur:500, blockDur:600},
+    fast:    {step:6,  cap:150, dur:300, blockDur:200},
+    instant: {step:0,  cap:0,   dur:150, blockDur:0}
   };
   function wireReadingReveal(){
     var blocks = Array.from(document.querySelectorAll('.reading'));
+    var revealed = new Array(blocks.length).fill(false);
     var startTime = Date.now();
+    var stopped = false;
+    var activeIO = null;
+    var animatingUntil = 0;
     var i = 0;
 
-    function tierFor(t){ return t >= 1700 ? 'instant' : (t >= 1000 ? 'fast' : 'normal'); }
+    function tierFor(t){ return t >= 1000 ? 'fast' : 'normal'; }
 
     function next(){
-      if(i >= blocks.length) return;
+      if(stopped || i >= blocks.length) return;
       var idx = i++;
       var el = blocks[idx];
-      var io = new IntersectionObserver(function(entries){
+      activeIO = new IntersectionObserver(function(entries){
         entries.forEach(function(entry){
           if(!entry.isIntersecting) return;
-          io.unobserve(el);
+          activeIO.unobserve(el);
           setGradientSpeed(tierFor(Date.now() - startTime));
+          revealed[idx] = true;
           el.classList.add('reveal-in');
-          setTimeout(next, blockRevealDuration(el));
+          var dur = blockRevealDuration(el);
+          animatingUntil = Date.now() + dur;
+          setTimeout(next, dur);
         });
       }, {threshold:0.3});
-      io.observe(el);
+      activeIO.observe(el);
     }
     next();
+
+    function massRevealWhenReady(){
+      var wait = Math.max(0, animatingUntil - Date.now());
+      setTimeout(function(){
+        if(Date.now() < animatingUntil){ massRevealWhenReady(); return; }
+        stopped = true;
+        if(activeIO) activeIO.disconnect();
+        setGradientSpeed('instant');
+        blocks.forEach(function(el, idx){
+          if(revealed[idx]) return;
+          revealed[idx] = true;
+          el.classList.add('reveal-in');
+        });
+      }, wait);
+    }
+    setTimeout(massRevealWhenReady, 1700);
   }
   var currentTier = 'normal';
   function setGradientSpeed(tier){
