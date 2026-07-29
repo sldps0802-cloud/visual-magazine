@@ -166,6 +166,9 @@
     <div class="auth-row">
       <button class="action save-btn" id="login-btn">로그인</button>
     </div>
+    <div class="auth-row" style="margin-top:8px;">
+      <button class="action clear-btn" id="google-login-btn">Google로 로그인</button>
+    </div>
   </div>
 
   <div id="editor-wrap" class="hidden">
@@ -204,6 +207,7 @@
 <script src="vendor/purify.min.js"></script>
 <script src="vendor/supabase.min.js"></script>
 <script src="supabase-config.js"></script>
+<script src="auth.js"></script>
 <script>
   var SUN = '<circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="4" y1="12" x2="2" y2="12"/><line x1="22" y1="12" x2="20" y2="12"/><line x1="19.07" y1="4.93" x2="17.66" y2="6.34"/><line x1="6.34" y1="17.66" x2="4.93" y2="19.07"/><line x1="19.07" y1="19.07" x2="17.66" y2="17.66"/><line x1="6.34" y1="6.34" x2="4.93" y2="4.93"/>';
   var MOON = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
@@ -240,19 +244,25 @@
     if(user) document.getElementById('auth-email-label').textContent = user.email;
     renderPostList();
   }
-  db.auth.getSession().then(function(res){ setAuthUI(res.data.session ? res.data.session.user : null); });
-  db.auth.onAuthStateChange(function(event, session){ setAuthUI(session ? session.user : null); });
+  Auth.getSession().then(setAuthUI);
+  Auth.onChange(setAuthUI);
 
   document.getElementById('login-btn').addEventListener('click', function(){
     var email = document.getElementById('auth-email').value.trim();
     var password = document.getElementById('auth-password').value;
     authMsg.textContent = '로그인 중…';
-    db.auth.signInWithPassword({ email: email, password: password }).then(function(res){
+    Auth.login(email, password).then(function(res){
       authMsg.textContent = res.error ? res.error.message : '';
     });
   });
+  document.getElementById('google-login-btn').addEventListener('click', function(){
+    authMsg.textContent = '';
+    Auth.loginWithGoogle().then(function(res){
+      if(res.error) authMsg.textContent = res.error.message;
+    });
+  });
   document.getElementById('logout-btn').addEventListener('click', function(){
-    db.auth.signOut();
+    Auth.logout();
   });
 
   document.getElementById('save-btn').addEventListener('click', function(){
