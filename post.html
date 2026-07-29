@@ -187,6 +187,7 @@
     transition:max-height .4s ease-out,opacity .4s ease-out,margin-top .4s ease-out;
   }
   .wc-popup.show{max-height:200px;opacity:1;margin-top:12px;padding:14px 16px;}
+  .wc-popup.show.expanded{max-height:2000px;}
   .wc-popup-text{font-size:13px;line-height:1.6;color:var(--text);}
   .wc-popup-text strong{color:var(--amber);}
   .wc-popup-actions{display:flex;gap:8px;margin-top:10px;justify-content:flex-end;}
@@ -339,30 +340,6 @@
           '</div>' +
         '</summary>' +
         '<div class="divide-detail"></div>' +
-      '</details>' +
-      '<details class="skipped" data-topic="' + wcEscape(post.title) + '">' +
-        '<summary class="feature-banner">' +
-          '<div class="feature-visual">' +
-            '<svg viewBox="0 0 160 120" width="130" height="98" fill="none">' +
-              '<circle cx="35" cy="60" r="20" fill="#2ecc71"/>' +
-              '<circle cx="80" cy="60" r="20" fill="none" stroke="#20120a" stroke-width="4"/>' +
-              '<circle cx="125" cy="60" r="20" fill="none" stroke="#20120a" stroke-width="4"/>' +
-            '</svg>' +
-          '</div>' +
-          '<div class="feature-panel">' +
-            '<div class="feature-toggle">' +
-              '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>' +
-            '</div>' +
-            '<div class="feature-badge">' +
-              '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="1.6" fill="currentColor" stroke="none"/><line x1="10" y1="6" x2="21" y2="6"/><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><line x1="10" y1="12" x2="21" y2="12"/><circle cx="5" cy="18" r="1.6" fill="currentColor" stroke="none"/><line x1="10" y1="18" x2="21" y2="18"/></svg>' +
-              '놓친 이야기' +
-            '</div>' +
-            '<div class="feature-banner-title">어느 지역 언론은 다루지 않았을까요</div>' +
-            '<div class="feature-banner-desc">같은 권역·매체를 확인해서 이 소식을 놓친 곳이 있는지 보여줘요.</div>' +
-            '<div class="feature-banner-meta">눌러서 확인하기</div>' +
-          '</div>' +
-        '</summary>' +
-        '<div class="skipped-detail"></div>' +
       '</details>';
     var bodyEl = document.createElement('div');
     bodyEl.className = 'body-content';
@@ -413,7 +390,7 @@
     main.appendChild(engageEl);
     document.title = post.title + ' · 비주얼매거진';
 
-    wireWorldCoverage(post, main.querySelector('.divide'), main.querySelector('.skipped'));
+    wireWorldCoverage(post, main.querySelector('.divide'));
     wireReadingReveal();
     wireComments(post);
   }
@@ -750,27 +727,20 @@
       '<div class="wc-note">주기적으로 갱신되는 결과예요.</div>';
   }
 
-  function wireWorldCoverage(post, divideEl, skippedEl){
-    [divideEl, skippedEl].forEach(function(el){
-      if(!el) return;
-      var isDivide = el.classList.contains('divide');
-      el.addEventListener('toggle', function(){
-        if(!el.open || el.dataset.wcLoading) return;
-        el.dataset.wcLoading = '1';
-        var container = el.querySelector('.divide-detail') || el.querySelector('.skipped-detail');
-        container.innerHTML = '<div class="wc-loading">불러오는 중…</div>';
-        wcLoadCoverage(post.id).then(function(results){
-          if(isDivide){
-            wcRenderDivide(container, results);
-            wcMaybeShowPopup(results, skippedEl);
-          } else {
-            wcRenderSkipped(container, results);
-          }
-        });
+  function wireWorldCoverage(post, divideEl){
+    if(!divideEl) return;
+    divideEl.addEventListener('toggle', function(){
+      if(!divideEl.open || divideEl.dataset.wcLoading) return;
+      divideEl.dataset.wcLoading = '1';
+      var container = divideEl.querySelector('.divide-detail');
+      container.innerHTML = '<div class="wc-loading">불러오는 중…</div>';
+      wcLoadCoverage(post.id).then(function(results){
+        wcRenderDivide(container, results);
+        wcMaybeShowPopup(results);
       });
     });
   }
-  function wcMaybeShowPopup(results, skippedEl){
+  function wcMaybeShowPopup(results){
     var matched = results.filter(function(r){ return r.matched; });
     if(matched.length === 0) return;
     var pick = matched[0];
@@ -787,12 +757,12 @@
         popup.classList.remove('show');
       });
       document.getElementById('wc-popup-confirm').addEventListener('click', function(){
-        popup.classList.remove('show');
-        if(skippedEl){
-          skippedEl.open = true;
-          skippedEl.dispatchEvent(new Event('toggle'));
-          skippedEl.scrollIntoView({behavior:'smooth', block:'center'});
-        }
+        popup.classList.add('expanded');
+        var box = document.createElement('div');
+        box.className = 'skipped-detail';
+        popup.appendChild(box);
+        wcRenderSkipped(box, results);
+        document.querySelector('.wc-popup-actions').remove();
       });
     }, 600);
   }
