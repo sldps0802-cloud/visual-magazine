@@ -179,6 +179,55 @@
   .skipped-meta{font-size:12px;color:var(--text-muted);}
   .chevron{color:var(--text-muted);flex:none;margin-top:2px;}
   @media (min-width:600px){ .divide-grid{grid-template-columns:1fr 1fr;} }
+
+  /* ---- engagement bar + comments ---- */
+  .engage-bar{
+    display:flex;align-items:center;gap:20px;padding:16px 0;
+    border-top:1px solid var(--surface-border);border-bottom:1px solid var(--surface-border);
+    margin:36px 0 28px;font-size:14px;color:var(--text-muted);
+  }
+  .like-btn,.comment-count{display:flex;align-items:center;gap:6px;}
+  .like-btn{background:none;border:none;color:var(--text-muted);font-family:inherit;font-size:14px;cursor:pointer;padding:0;}
+  .like-btn svg{width:18px;height:18px;}
+  .like-btn.liked{color:var(--amber);}
+  .like-btn.liked svg{fill:var(--amber);}
+  .like-btn:disabled{cursor:default;}
+
+  .comment-form{margin-bottom:32px;}
+  .comment-identity{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+  .comment-avatar{
+    width:36px;height:36px;border-radius:50%;flex:none;position:relative;
+    display:flex;align-items:center;justify-content:center;font-size:17px;cursor:pointer;
+  }
+  .comment-nickname{font-weight:700;font-size:14px;}
+  .reroll-btn{
+    font-size:12px;padding:4px 10px;border-radius:999px;font-family:inherit;cursor:pointer;
+    background:var(--surface);border:1px solid var(--surface-border);color:var(--text);
+  }
+  .comment-input{
+    width:100%;min-height:64px;resize:vertical;
+    background:var(--surface);border:1px solid var(--surface-border);border-radius:12px;
+    padding:12px 14px;color:var(--text);font-family:inherit;font-size:14px;line-height:1.6;
+    outline:none;margin-bottom:10px;
+  }
+  .comment-submit{
+    float:right;padding:9px 18px;border-radius:999px;border:none;
+    background:var(--btn-bg);color:var(--btn-text);font-size:13px;font-weight:700;
+    cursor:pointer;font-family:inherit;
+  }
+  .comment-msg{font-size:12px;color:var(--amber);clear:both;padding-top:10px;min-height:14px;}
+
+  .comment-list{list-style:none;clear:both;}
+  .comment-row{display:flex;gap:10px;padding:14px 0;border-bottom:1px solid var(--surface-border);}
+  .comment-row:last-child{border-bottom:none;}
+  .comment-main{flex:1;min-width:0;}
+  .comment-body{font-size:14px;line-height:1.6;color:var(--text);margin-top:2px;white-space:pre-wrap;word-break:break-word;}
+  .comment-ip-panel{
+    position:absolute;top:calc(100% + 6px);left:0;z-index:2;
+    background:#20120a;color:#f5e9da;font-size:11px;padding:8px 10px;border-radius:8px;
+    white-space:nowrap;box-shadow:0 8px 24px rgba(0,0,0,.3);
+  }
+  .comment-empty{font-size:13px;color:var(--text-muted);padding:8px 0;}
 </style>
 </head>
 <body>
@@ -187,9 +236,6 @@
   <a class="logo-lockup" href="index.html">
     <span class="logo-mark">VC</span>
     <span class="logo-name">비주얼매거진</span>
-  </a>
-  <a class="round" href="write.html">
-    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
   </a>
 </nav>
 
@@ -209,12 +255,12 @@
   var main = document.getElementById('main');
 
   if(!id){
-    main.innerHTML = '<div class="not-found">글을 찾을 수 없어요. <a href="write.html">글쓰기로 돌아가기</a></div>';
+    main.innerHTML = '<div class="not-found">글을 찾을 수 없어요. <a href="index.html">홈으로 돌아가기</a></div>';
   } else {
     main.innerHTML = '<div class="wc-loading">불러오는 중…</div>';
     db.from('posts').select('*').eq('id', id).single().then(function(res){
       if(res.error || !res.data){
-        main.innerHTML = '<div class="not-found">글을 찾을 수 없어요. <a href="write.html">글쓰기로 돌아가기</a></div>';
+        main.innerHTML = '<div class="not-found">글을 찾을 수 없어요. <a href="index.html">홈으로 돌아가기</a></div>';
         return;
       }
       renderPost(res.data);
@@ -300,11 +346,35 @@
     main.appendChild(titleEl);
     main.appendChild(metaEl);
     main.appendChild(divideEl);
-    main.appendChild(bodyEl);
+    var engageEl = document.createElement('div');
+    engageEl.innerHTML =
+      '<div class="engage-bar">' +
+        '<button class="like-btn" id="like-btn">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>' +
+          '<span id="like-count">' + (post.likes || 0) + '</span>' +
+        '</button>' +
+        '<div class="comment-count">' +
+          '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>' +
+          '<span id="comment-count">0</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="comment-form">' +
+        '<div class="comment-identity">' +
+          '<div class="comment-avatar" id="my-avatar"></div>' +
+          '<span class="comment-nickname" id="my-nickname"></span>' +
+          '<button class="reroll-btn" id="reroll-btn">랜덤 변경</button>' +
+        '</div>' +
+        '<textarea class="comment-input" id="comment-input" placeholder="댓글을 남겨보세요" maxlength="500"></textarea>' +
+        '<button class="comment-submit" id="comment-submit">댓글 남기기</button>' +
+        '<div class="comment-msg" id="comment-msg"></div>' +
+      '</div>' +
+      '<ul class="comment-list" id="comment-list"></ul>';
+    main.appendChild(engageEl);
     document.title = post.title + ' · 비주얼매거진';
 
     wireWorldCoverage(post, main.querySelector('.divide'), main.querySelector('.skipped'));
     wireReadingReveal();
+    wireComments(post);
   }
 
   /* ---- wraps each word (or inline element) in its own span with a stagger index,
@@ -406,6 +476,132 @@
     var wordCount = el.querySelectorAll('.word').length;
     return Math.min((wordCount - 1) * cfg.step, cfg.cap) + cfg.dur + 100;
   }
+
+  /* ---- comments + likes: random nickname/avatar, submitted through the
+     submit-comment Edge Function (never straight to Postgres) so VPN/IP
+     checks can't be bypassed by calling the REST API directly. ---- */
+  var COMMENT_ADJS = ['씩씩한','유쾌한','다정한','용감한','엉뚱한','차분한','활발한','느긋한','상냥한','똑똑한','부지런한','소심한','명랑한','시크한','든든한','살가운','재빠른','어여쁜','늠름한','수줍은'];
+  var COMMENT_ANIMALS = {
+    '치타':'🐆','알파카':'🦙','사자':'🦁','여우':'🦊','곰':'🐻','토끼':'🐰','고양이':'🐱','강아지':'🐶',
+    '판다':'🐼','펭귄':'🐧','코알라':'🐨','다람쥐':'🐿️','부엉이':'🦉','수달':'🦦','하마':'🦛','기린':'🦒',
+    '호랑이':'🐯','늑대':'🐺','오소리':'🦡','낙타':'🐫'
+  };
+  var AVATAR_COLORS = ['#ffd9a8','#a8d8ff','#c9a8ff','#a8ffd0','#ffb8d0','#ffe9a8','#a8f0ff','#d0ffa8'];
+  var COMMENT_FN_URL = SUPABASE_URL + '/functions/v1/submit-comment';
+  var myIdentity = null;
+
+  function pick(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
+  function rollIdentity(){
+    var animals = Object.keys(COMMENT_ANIMALS);
+    var adj = pick(COMMENT_ADJS), animal = pick(animals);
+    var nickname = adj + animal;
+    var colorIdx = 0;
+    for(var i = 0; i < nickname.length; i++) colorIdx += nickname.charCodeAt(i);
+    myIdentity = { nickname: nickname, emoji: COMMENT_ANIMALS[animal], color: AVATAR_COLORS[colorIdx % AVATAR_COLORS.length] };
+    return myIdentity;
+  }
+  function paintIdentity(){
+    var av = document.getElementById('my-avatar');
+    av.style.background = myIdentity.color;
+    av.textContent = myIdentity.emoji;
+    document.getElementById('my-nickname').textContent = myIdentity.nickname;
+  }
+  function commentAvatarHtml(nickname, emoji, ipLabel){
+    var colorIdx = 0;
+    for(var i = 0; i < nickname.length; i++) colorIdx += nickname.charCodeAt(i);
+    var color = AVATAR_COLORS[colorIdx % AVATAR_COLORS.length];
+    var ipAttr = ipLabel ? ' data-ip="' + wcEscape(ipLabel) + '"' : '';
+    return '<div class="comment-avatar" style="background:' + color + '"' + ipAttr + '>' + emoji + '</div>';
+  }
+  function animalOf(nickname){
+    var animals = Object.keys(COMMENT_ANIMALS);
+    for(var i = 0; i < animals.length; i++){ if(nickname.indexOf(animals[i]) !== -1) return animals[i]; }
+    return null;
+  }
+
+  function wireComments(post){
+    rollIdentity();
+    paintIdentity();
+    document.getElementById('reroll-btn').addEventListener('click', function(){
+      rollIdentity();
+      paintIdentity();
+    });
+
+    var likeBtn = document.getElementById('like-btn');
+    var likedKey = 'liked_post_' + post.id;
+    if(localStorage.getItem(likedKey)) likeBtn.classList.add('liked');
+    likeBtn.addEventListener('click', function(){
+      if(localStorage.getItem(likedKey)) return;
+      likeBtn.disabled = true;
+      fetch(COMMENT_FN_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY },
+        body: JSON.stringify({ action: 'like', post_id: post.id })
+      }).then(function(r){ return r.json(); }).then(function(res){
+        likeBtn.disabled = false;
+        if(res.error){ alert(res.error); return; }
+        localStorage.setItem(likedKey, '1');
+        likeBtn.classList.add('liked');
+        var countEl = document.getElementById('like-count');
+        countEl.textContent = Number(countEl.textContent) + 1;
+      }).catch(function(){ likeBtn.disabled = false; });
+    });
+
+    document.getElementById('comment-submit').addEventListener('click', function(){
+      var input = document.getElementById('comment-input');
+      var text = input.value.trim();
+      var msg = document.getElementById('comment-msg');
+      if(!text){ msg.textContent = '댓글 내용을 입력하세요.'; return; }
+      var btn = this;
+      btn.disabled = true;
+      msg.textContent = '올리는 중…';
+      fetch(COMMENT_FN_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY },
+        body: JSON.stringify({ action: 'comment', post_id: post.id, nickname: myIdentity.nickname, avatar_seed: myIdentity.nickname, body: text })
+      }).then(function(r){ return r.json(); }).then(function(res){
+        btn.disabled = false;
+        if(res.error){ msg.textContent = res.error; return; }
+        msg.textContent = '';
+        input.value = '';
+        loadComments(post.id);
+      }).catch(function(){ btn.disabled = false; msg.textContent = '올리기 실패, 다시 시도해주세요.'; });
+    });
+
+    loadComments(post.id);
+  }
+
+  function loadComments(postId){
+    db.from('comments').select('*').eq('post_id', postId).order('created_at', {ascending:false}).then(function(res){
+      var list = document.getElementById('comment-list');
+      var comments = res.data || [];
+      document.getElementById('comment-count').textContent = comments.length;
+      if(comments.length === 0){
+        list.innerHTML = '<li class="comment-empty">첫 댓글을 남겨보세요.</li>';
+        return;
+      }
+      list.innerHTML = comments.map(function(c){
+        var emoji = COMMENT_ANIMALS[animalOf(c.nickname)] || '🐾';
+        var ipLabel = (c.ip_prefix || '알 수 없음') + '.*.* · ' + (c.country || '?');
+        return '<li class="comment-row">' +
+          commentAvatarHtml(c.nickname, emoji, ipLabel) +
+          '<div class="comment-main">' +
+            '<span class="comment-nickname">' + wcEscape(c.nickname) + '</span>' +
+            '<div class="comment-body">' + wcEscape(c.body) + '</div>' +
+          '</div>' +
+        '</li>';
+      }).join('');
+    });
+  }
+  document.addEventListener('click', function(e){
+    var av = e.target.closest && e.target.closest('.comment-avatar[data-ip]');
+    document.querySelectorAll('.comment-ip-panel').forEach(function(p){ p.remove(); });
+    if(!av) return;
+    var panel = document.createElement('div');
+    panel.className = 'comment-ip-panel';
+    panel.textContent = av.dataset.ip;
+    av.appendChild(panel);
+  });
 
   /* ---- world coverage: live RSS by region, matched to this post's title ---- */
   var WC_REGIONS = [
