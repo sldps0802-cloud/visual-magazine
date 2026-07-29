@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>글쓰기 · 비주얼매거진</title>
+<style>
+  :root{
+    --gold:#ffcf8a;
+    --amber:#e8823c;
+    --bg-top:#2a1206;
+    --bg-mid:#5a2f12;
+    --bg-bottom:#8a4a1f;
+    --text:#f5e9da;
+    --text-muted:rgba(245,233,218,.6);
+    --surface:rgba(255,255,255,.06);
+    --surface-border:rgba(255,255,255,.14);
+    --btn-bg:#f5e9da;
+    --btn-text:#2a1206;
+  }
+  :root[data-theme="light"]{
+    --gold:#c97a2e;
+    --amber:#b8571f;
+    --bg-top:#fffaf3;
+    --bg-mid:#fbead0;
+    --bg-bottom:#f3d19d;
+    --text:#2a1206;
+    --text-muted:rgba(42,18,6,.6);
+    --surface:rgba(42,18,6,.05);
+    --surface-border:rgba(42,18,6,.12);
+    --btn-bg:#2a1206;
+    --btn-text:#fffaf3;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    font-family:"Pretendard","Apple SD Gothic Neo",sans-serif;
+    color:var(--text);
+    background:linear-gradient(180deg,var(--bg-top),var(--bg-mid) 45%,var(--bg-bottom) 100%);
+    background-attachment:fixed;
+    min-height:100vh;
+  }
+  a{color:inherit;text-decoration:none;}
+  svg{display:block;}
+  .wrap{max-width:960px;margin:0 auto;padding:0 24px;}
+
+  nav{
+    position:sticky;top:0;z-index:10;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:16px 24px;
+    background:rgba(20,8,4,.4);backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--surface-border);
+  }
+  .logo-lockup{display:flex;align-items:center;gap:8px;}
+  .logo-mark{font-size:19px;font-weight:900;letter-spacing:-.09em;color:var(--text);}
+  .logo-name{
+    font-size:15px;font-weight:700;
+    background:linear-gradient(90deg,var(--gold),var(--amber),var(--gold));
+    background-size:200% auto;-webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .navicons{display:flex;gap:10px;}
+  .round{
+    width:36px;height:36px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
+    background:var(--surface);border:1px solid var(--surface-border);color:var(--text);
+  }
+
+  main{padding:32px 0 80px;}
+  .title-input{
+    width:100%;border:none;background:transparent;color:var(--text);
+    font-family:inherit;font-size:28px;font-weight:800;line-height:1.4;
+    outline:none;margin-bottom:16px;
+  }
+  .title-input::placeholder{color:var(--text-muted);}
+
+  .editor-grid{display:grid;grid-template-columns:1fr;gap:16px;}
+  @media (min-width:860px){ .editor-grid{grid-template-columns:1fr 1fr;} }
+  .pane-label{font-size:12px;font-weight:700;letter-spacing:.05em;color:var(--text-muted);margin-bottom:8px;}
+  textarea{
+    width:100%;min-height:420px;resize:vertical;
+    background:var(--surface);border:1px solid var(--surface-border);border-radius:14px;
+    padding:16px;color:var(--text);font-family:ui-monospace,Consolas,monospace;font-size:14px;line-height:1.7;
+    outline:none;
+  }
+  .preview{
+    min-height:420px;background:var(--surface);border:1px solid var(--surface-border);border-radius:14px;
+    padding:16px;overflow:auto;
+  }
+  .preview h1,.preview h2,.preview h3{margin:.8em 0 .4em;line-height:1.4;}
+  .preview p{margin:.6em 0;line-height:1.8;font-size:15px;}
+  .preview a{color:var(--amber);text-decoration:underline;}
+  .preview ul,.preview ol{margin:.6em 0 .6em 1.2em;}
+  .preview blockquote{border-left:3px solid var(--amber);padding-left:12px;color:var(--text-muted);margin:.6em 0;}
+  .preview code{background:var(--surface-border);padding:2px 5px;border-radius:4px;font-size:13px;}
+  .preview img{max-width:100%;border-radius:8px;}
+
+  .toolbar{display:flex;gap:10px;margin:20px 0 48px;}
+  button.action{
+    padding:12px 22px;border-radius:999px;border:1px solid var(--surface-border);
+    font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;
+  }
+  .save-btn{background:var(--btn-bg);color:var(--btn-text);border:none;}
+  .clear-btn{background:transparent;color:var(--text);}
+
+  .posts-title{font-size:17px;font-weight:800;margin-bottom:16px;}
+  .post-list{list-style:none;}
+  .post-row{
+    display:flex;align-items:center;justify-content:space-between;gap:16px;
+    padding:16px 0;border-bottom:1px solid var(--surface-border);
+  }
+  .post-row:first-child{padding-top:0;}
+  .post-row h3{font-size:15px;font-weight:700;margin-bottom:4px;}
+  .post-row .post-date{font-size:12px;color:var(--text-muted);}
+  .post-actions{display:flex;gap:8px;flex:none;}
+  .post-actions a,.post-actions button{
+    font-size:13px;padding:6px 12px;border-radius:999px;
+    background:var(--surface);border:1px solid var(--surface-border);color:var(--text);cursor:pointer;font-family:inherit;
+  }
+  .empty{color:var(--text-muted);font-size:14px;}
+  .notice{font-size:12px;color:var(--text-muted);margin-bottom:24px;line-height:1.6;}
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="logo-lockup" href="index.html">
+    <span class="logo-mark">VC</span>
+    <span class="logo-name">비주얼매거진</span>
+  </a>
+  <div class="navicons">
+    <div class="round" id="theme-toggle" aria-label="테마 전환">
+      <svg id="theme-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></svg>
+    </div>
+    <a class="round" href="index.html">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+    </a>
+  </div>
+</nav>
+
+<main class="wrap">
+  <p class="notice">이 브라우저에만 저장돼요(로컬 저장소). 다른 기기·브라우저에서는 보이지 않아요.</p>
+
+  <input class="title-input" id="post-title" placeholder="제목을 입력하세요">
+
+  <div class="editor-grid">
+    <div>
+      <div class="pane-label">마크다운으로 작성</div>
+      <textarea id="post-body" placeholder="여기에 마크다운으로 본문을 작성하세요.
+
+## 소제목
+문단 텍스트, **굵게**, *기울임*, [링크](https://example.com) 모두 지원돼요."></textarea>
+    </div>
+    <div>
+      <div class="pane-label">미리보기</div>
+      <div class="preview" id="preview"></div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <button class="action save-btn" id="save-btn">저장하고 보기</button>
+    <button class="action clear-btn" id="clear-btn">비우기</button>
+  </div>
+
+  <div class="posts-title">내 글 목록</div>
+  <ul class="post-list" id="post-list"></ul>
+</main>
+
+<script src="vendor/marked.min.js"></script>
+<script src="vendor/purify.min.js"></script>
+<script>
+  var SUN = '<circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="4" y1="12" x2="2" y2="12"/><line x1="22" y1="12" x2="20" y2="12"/><line x1="19.07" y1="4.93" x2="17.66" y2="6.34"/><line x1="6.34" y1="17.66" x2="4.93" y2="19.07"/><line x1="19.07" y1="19.07" x2="17.66" y2="17.66"/><line x1="6.34" y1="6.34" x2="4.93" y2="4.93"/>';
+  var MOON = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+  var themeIcon = document.getElementById('theme-icon');
+  function applyTheme(t){
+    document.documentElement.dataset.theme = t;
+    localStorage.setItem('theme', t);
+    themeIcon.innerHTML = t === 'light' ? MOON : SUN;
+  }
+  applyTheme(localStorage.getItem('theme') || 'dark');
+  document.getElementById('theme-toggle').addEventListener('click', function(){
+    applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
+  });
+
+  var STORE_KEY = 'vc_posts';
+  function loadPosts(){ return JSON.parse(localStorage.getItem(STORE_KEY) || '[]'); }
+  function savePosts(list){ localStorage.setItem(STORE_KEY, JSON.stringify(list)); }
+
+  var titleEl = document.getElementById('post-title');
+  var bodyEl = document.getElementById('post-body');
+  var previewEl = document.getElementById('preview');
+
+  function renderPreview(){
+    var html = marked.parse(bodyEl.value || '');
+    previewEl.innerHTML = DOMPurify.sanitize(html);
+  }
+  bodyEl.addEventListener('input', renderPreview);
+  renderPreview();
+
+  document.getElementById('save-btn').addEventListener('click', function(){
+    var title = titleEl.value.trim();
+    var body = bodyEl.value.trim();
+    if(!title || !body){ alert('제목과 본문을 모두 입력하세요.'); return; }
+    var posts = loadPosts();
+    var id = String(Date.now());
+    posts.unshift({ id: id, title: title, body: body, createdAt: new Date().toISOString() });
+    savePosts(posts);
+    localStorage.setItem('vc_current_post', id);
+    location.href = 'post.html?id=' + id;
+  });
+
+  document.getElementById('clear-btn').addEventListener('click', function(){
+    titleEl.value = '';
+    bodyEl.value = '';
+    renderPreview();
+  });
+
+  function renderPostList(){
+    var posts = loadPosts();
+    var listEl = document.getElementById('post-list');
+    if(posts.length === 0){
+      listEl.innerHTML = '<li class="empty">아직 작성한 글이 없어요.</li>';
+      return;
+    }
+    listEl.innerHTML = posts.map(function(p){
+      var date = new Date(p.createdAt).toLocaleDateString('ko-KR');
+      return '<li class="post-row">' +
+        '<div><h3>' + escapeHtml(p.title) + '</h3><div class="post-date">' + date + '</div></div>' +
+        '<div class="post-actions">' +
+          '<a href="post.html?id=' + p.id + '" data-view="' + p.id + '">보기</a>' +
+          '<button data-edit="' + p.id + '">수정</button>' +
+          '<button data-del="' + p.id + '">삭제</button>' +
+        '</div>' +
+      '</li>';
+    }).join('');
+  }
+  function escapeHtml(s){
+    return s.replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  document.getElementById('post-list').addEventListener('click', function(e){
+    var viewId = e.target.getAttribute('data-view');
+    var editId = e.target.getAttribute('data-edit');
+    var delId = e.target.getAttribute('data-del');
+    if(viewId){ localStorage.setItem('vc_current_post', viewId); }
+    if(editId){
+      var post = loadPosts().find(function(p){ return p.id === editId; });
+      if(post){ titleEl.value = post.title; bodyEl.value = post.body; renderPreview(); window.scrollTo(0,0); }
+    }
+    if(delId){
+      if(confirm('이 글을 삭제할까요?')){
+        savePosts(loadPosts().filter(function(p){ return p.id !== delId; }));
+        renderPostList();
+      }
+    }
+  });
+  renderPostList();
+</script>
+</body>
+</html>

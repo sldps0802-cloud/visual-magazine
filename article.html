@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Magazine (scaffold)</title>
+<style>
+  :root{
+    --gold:#ffcf8a;
+    --amber:#e8823c;
+    --bg-top:#2a1206;
+    --bg-mid:#5a2f12;
+    --bg-bottom:#8a4a1f;
+    --text:#f5e9da;
+    --text-muted:rgba(245,233,218,.6);
+    --surface:rgba(255,255,255,.06);
+    --surface-border:rgba(255,255,255,.14);
+    --btn-bg:#f5e9da;
+    --btn-text:#2a1206;
+  }
+  :root[data-theme="light"]{
+    --gold:#c97a2e;
+    --amber:#b8571f;
+    --bg-top:#fffaf3;
+    --bg-mid:#fbead0;
+    --bg-bottom:#f3d19d;
+    --text:#2a1206;
+    --text-muted:rgba(42,18,6,.6);
+    --surface:rgba(42,18,6,.05);
+    --surface-border:rgba(42,18,6,.12);
+    --btn-bg:#2a1206;
+    --btn-text:#fffaf3;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    font-family:"Pretendard","Apple SD Gothic Neo",sans-serif;
+    color:var(--text);
+    background:linear-gradient(180deg,var(--bg-top),var(--bg-mid) 45%,var(--bg-bottom) 100%);
+    background-attachment:fixed;
+    transition:background .3s ease-out,color .3s ease-out;
+  }
+  a{color:inherit;text-decoration:none;}
+  section{
+    position:relative;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:32px 24px;
+    overflow:hidden;
+  }
+  svg{display:block;}
+
+  /* top nav, shared */
+  nav{
+    position:fixed;
+    top:16px;left:0;right:0;
+    display:flex;justify-content:space-between;
+    padding:0 20px;
+    z-index:10;
+    pointer-events:none;
+  }
+  nav > *{pointer-events:auto;}
+  .navicons{display:flex;gap:10px;}
+  .pill,.round{
+    background:var(--surface);
+    border:1px solid var(--surface-border);
+    backdrop-filter:blur(6px);
+    color:var(--text);
+    font-size:13px;
+  }
+  .pill{border-radius:999px;padding:8px 16px;}
+  .round{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;}
+  .logo-lockup{display:flex;align-items:center;gap:8px;}
+  .logo-mark{font-size:19px;font-weight:900;letter-spacing:-.09em;color:var(--text);}
+  .logo-name{
+    font-size:15px;font-weight:700;
+    background:linear-gradient(90deg,var(--gold),var(--amber),var(--gold));
+    background-size:200% auto;
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    animation:shimmer 4s linear infinite;
+  }
+
+  /* ---- hero: text effects ---- */
+  #hero{
+    padding-top:100px;padding-bottom:48px;
+  }
+  .hero-text{
+    text-align:center;
+    animation:fade-up 1s ease-out both;
+  }
+  .brand{
+    font-size:15px;letter-spacing:.25em;
+    text-transform:uppercase;
+    background:linear-gradient(90deg,var(--gold),var(--amber),var(--gold));
+    background-size:200% auto;
+    -webkit-background-clip:text;
+            background-clip:text;
+    color:transparent;
+    margin-bottom:20px;
+    animation:shimmer 3s linear infinite;
+  }
+  .headline{
+    font-size:30px;line-height:1.45;font-weight:700;
+    text-shadow:0 0 30px rgba(255,190,120,.35);
+  }
+  .meta{
+    margin-top:20px;font-size:13px;color:var(--text-muted);
+    display:flex;gap:16px;justify-content:center;flex-wrap:wrap;
+  }
+  .meta span{display:inline-flex;align-items:center;gap:6px;}
+  .social-row{
+    margin-top:24px;display:flex;gap:10px;
+  }
+  .social-row button{
+    display:flex;align-items:center;gap:6px;
+    padding:8px 16px;border-radius:999px;
+    background:var(--surface);border:1px solid var(--surface-border);
+    color:var(--text);font-size:13px;cursor:pointer;
+  }
+  .social-row button:hover{background:var(--surface-border);}
+  .panel-eyebrow{
+    font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--amber);margin-bottom:10px;text-align:left;
+  }
+
+  /* ---- feature banner (shared by divide + skipped) ---- */
+  .divide,.skipped{
+    margin-top:32px;max-width:560px;width:100%;text-align:left;
+  }
+  .skipped{margin-top:16px;}
+  summary{list-style:none;cursor:pointer;}
+  summary::-webkit-details-marker{display:none;}
+  summary::marker{content:'';}
+  .feature-banner{
+    display:flex;flex-direction:column;position:relative;
+    border-radius:16px;overflow:hidden;
+    transition:filter .15s ease-out;
+  }
+  summary:hover .feature-banner{filter:brightness(1.06);}
+  .feature-toggle{
+    position:absolute;top:16px;right:16px;z-index:1;
+    width:26px;height:26px;border-radius:50%;
+    background:rgba(255,255,255,.15);color:#f5e9da;
+    display:flex;align-items:center;justify-content:center;
+    transition:transform .2s ease-out;
+  }
+  details[open] .feature-toggle{transform:rotate(180deg);}
+  .divide-detail,.skipped-detail{margin-top:16px;}
+  .feature-visual{
+    background:linear-gradient(160deg,var(--gold),var(--amber));
+    min-height:150px;flex:none;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .feature-panel{
+    background:#20120a;color:#f5e9da;
+    padding:20px;
+  }
+  .feature-badge{
+    display:flex;align-items:center;gap:6px;
+    font-size:13px;font-weight:700;color:#ffcf8a;margin-bottom:10px;
+  }
+  .feature-banner-title{font-size:19px;line-height:1.4;font-weight:800;margin-bottom:10px;}
+  .feature-banner-desc{font-size:13px;line-height:1.7;color:rgba(245,233,218,.7);margin-bottom:16px;}
+  .feature-banner-meta{font-size:12px;color:rgba(245,233,218,.45);}
+  @media (min-width:600px){
+    .feature-banner{flex-direction:row;}
+    .feature-visual{width:38%;min-height:auto;}
+    .feature-panel{width:62%;}
+  }
+
+  /* ---- the divide: source comparison cards ---- */
+  .divide-grid{display:grid;grid-template-columns:1fr;gap:12px;}
+  .divide-card{
+    background:var(--surface);border:1px solid var(--surface-border);
+    border-radius:12px;padding:14px;
+  }
+  .divide-card.accent{
+    background:color-mix(in srgb, var(--amber) 10%, transparent);
+    border-color:color-mix(in srgb, var(--amber) 45%, transparent);
+  }
+  .source-row{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;margin-bottom:10px;}
+  .source-row em{font-weight:400;font-style:normal;color:var(--text-muted);}
+  .source-badge{
+    width:22px;height:22px;border-radius:50%;flex:none;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--surface-border);font-size:11px;font-weight:700;
+  }
+  .divide-card blockquote{font-size:14px;line-height:1.6;color:var(--text);opacity:.85;margin-bottom:10px;}
+  .source-link{font-size:13px;font-weight:600;color:var(--amber);}
+  @media (min-width:600px){
+    .divide-grid{grid-template-columns:1fr 1fr;}
+  }
+  .wc-loading,.wc-empty{
+    font-size:13px;color:var(--text-muted);
+    background:var(--surface);border:1px solid var(--surface-border);
+    border-radius:14px;padding:16px;
+  }
+  .wc-note{font-size:11px;color:var(--text-muted);opacity:.7;margin-top:10px;}
+
+  /* ---- who skipped what: list ---- */
+  .skipped-box{
+    background:var(--surface);border:1px solid var(--surface-border);
+    border-radius:16px;padding:20px;
+  }
+  .skipped-list{list-style:none;}
+  .skipped-row{
+    display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+    padding:14px 0;border-bottom:1px solid var(--surface-border);
+  }
+  .skipped-list li:last-child .skipped-row{border-bottom:none;padding-bottom:0;}
+  .skipped-list li:first-child .skipped-row{padding-top:0;}
+  .skipped-title{font-size:14px;font-weight:600;margin-bottom:8px;}
+  .coverage-dots{display:flex;gap:4px;margin-bottom:8px;}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--surface-border);}
+  .dot.on{background:#2ecc71;}
+  .skipped-meta{font-size:12px;color:var(--text-muted);}
+  .chevron{color:var(--text-muted);flex:none;margin-top:2px;}
+
+  .reading{opacity:0;}
+  @keyframes fade-up{from{opacity:0;transform:translateY(16px);}}
+  @keyframes shimmer{to{background-position:-200% center;}}
+
+  /* ---- result: stacked readings ---- */
+  #result{
+    align-items:stretch;
+    text-align:center;
+    gap:40px;
+    padding:56px 24px 80px;
+  }
+  .reading h2, .reading p{
+    background-image:linear-gradient(90deg, var(--text) 50%, var(--bg-mid) 50%);
+    background-size:200% 100%;
+    background-position:100% 0;
+    -webkit-background-clip:text;
+            background-clip:text;
+    color:transparent;
+  }
+  .reading h2{
+    font-size:15px;letter-spacing:.05em;margin-bottom:12px;font-weight:600;
+  }
+  .reading p{
+    font-size:15px;line-height:1.9;
+    max-width:520px;margin:0 auto;
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="logo-lockup" href="index.html">
+    <span class="logo-mark">VC</span>
+    <span class="logo-name">비주얼매거진</span>
+  </a>
+  <div class="navicons">
+    <a class="round" href="write.html" aria-label="글쓰기">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+    </a>
+    <div class="round" id="theme-toggle" aria-label="테마 전환">
+      <svg id="theme-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></svg>
+    </div>
+    <div class="round">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </div>
+  </div>
+</nav>
+
+<section id="hero">
+  <div class="hero-text">
+    <div class="brand">라이프스타일</div>
+    <h1 class="headline">기사 제목이<br>여기에 들어갑니다</h1>
+    <div class="meta">
+      <span><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/></svg>2026.07.29</span>
+      <span><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>김에디터</span>
+      <span><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 16 14"/></svg>5분 읽기</span>
+    </div>
+    <div class="social-row">
+      <button><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-9.5-8.8C.7 8.6 2.3 5 6 5c2 0 3.5 1.2 4 2.3.5-1.1 2-2.3 4-2.3 3.7 0 5.3 3.6 3.5 7.2C19 16.65 12 21 12 21z"/></svg>0</button>
+      <button><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>0</button>
+      <button><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="8 7 17 7 17 16"/></svg>0</button>
+    </div>
+    <details class="divide" data-topic="Ukraine Caspian Sea Iran Russia vessel strike Sybiha seafarer">
+      <summary class="feature-banner">
+        <div class="feature-visual">
+          <svg viewBox="0 0 160 120" width="130" height="98" fill="none">
+            <rect x="8" y="14" width="86" height="56" rx="14" fill="#20120a"/>
+            <path d="M20 70 L20 86 L38 70 Z" fill="#20120a"/>
+            <rect x="62" y="46" width="92" height="56" rx="14" fill="#fff8ef"/>
+            <path d="M150 102 L150 118 L132 102 Z" fill="#fff8ef"/>
+          </svg>
+        </div>
+        <div class="feature-panel">
+          <div class="feature-toggle">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+          <div class="feature-badge">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/></svg>
+            엇갈린 시선
+          </div>
+          <div class="feature-banner-title">전 세계 언론은 이 소식을 다르게 다룹니다</div>
+          <div class="feature-banner-desc">8개 대륙 권역 + 한·미·일 대표 언론 + 구글 뉴스에서 같은 주제의 기사를 실시간으로 찾아 시각차를 비교해요.</div>
+          <div class="feature-banner-meta">눌러서 비교해보기</div>
+        </div>
+      </summary>
+      <div class="divide-detail"></div>
+    </details>
+
+    <details class="skipped" data-topic="Ukraine Caspian Sea Iran Russia vessel strike Sybiha seafarer">
+      <summary class="feature-banner">
+        <div class="feature-visual">
+          <svg viewBox="0 0 160 120" width="130" height="98" fill="none">
+            <circle cx="35" cy="60" r="20" fill="#2ecc71"/>
+            <circle cx="80" cy="60" r="20" fill="none" stroke="#20120a" stroke-width="4"/>
+            <circle cx="125" cy="60" r="20" fill="none" stroke="#20120a" stroke-width="4"/>
+          </svg>
+        </div>
+        <div class="feature-panel">
+          <div class="feature-toggle">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+          <div class="feature-badge">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="1.6" fill="currentColor" stroke="none"/><line x1="10" y1="6" x2="21" y2="6"/><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><line x1="10" y1="12" x2="21" y2="12"/><circle cx="5" cy="18" r="1.6" fill="currentColor" stroke="none"/><line x1="10" y1="18" x2="21" y2="18"/></svg>
+            놓친 이야기
+          </div>
+          <div class="feature-banner-title">어느 지역 언론은 다루지 않았을까요</div>
+          <div class="feature-banner-desc">같은 권역·매체를 확인해서 이 소식을 놓친 곳이 있는지 보여줘요.</div>
+          <div class="feature-banner-meta">눌러서 확인하기</div>
+        </div>
+      </summary>
+      <div class="skipped-detail"></div>
+    </details>
+  </div>
+</section>
+
+<section id="result">
+  <div class="reading">
+    <h2>인트로</h2>
+    <p>여기에 도입부 본문 텍스트가 들어갑니다.</p>
+  </div>
+  <div class="reading">
+    <h2>본론 1</h2>
+    <p>여기에 첫 번째 본문 텍스트가 들어갑니다.</p>
+  </div>
+  <div class="reading">
+    <h2>본론 2</h2>
+    <p>여기에 두 번째 본문 텍스트가 들어갑니다.</p>
+  </div>
+  <div class="reading">
+    <h2>마무리</h2>
+    <p>여기에 마무리 본문 텍스트가 들어갑니다.</p>
+  </div>
+</section>
+
+<script>
+  var SUN = '<circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="4" y1="12" x2="2" y2="12"/><line x1="22" y1="12" x2="20" y2="12"/><line x1="19.07" y1="4.93" x2="17.66" y2="6.34"/><line x1="6.34" y1="17.66" x2="4.93" y2="19.07"/><line x1="19.07" y1="19.07" x2="17.66" y2="17.66"/><line x1="6.34" y1="6.34" x2="4.93" y2="4.93"/>';
+  var MOON = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+  var themeIcon = document.getElementById('theme-icon');
+  function applyTheme(t){
+    document.documentElement.dataset.theme = t;
+    localStorage.setItem('theme', t);
+    themeIcon.innerHTML = t === 'light' ? MOON : SUN;
+  }
+  applyTheme(localStorage.getItem('theme') || 'dark');
+  document.getElementById('theme-toggle').addEventListener('click', function(){
+    applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
+  });
+
+  var readings = document.querySelectorAll('.reading');
+  var LINE = 0.82, SPAN = 220; // reveal line position + px distance to fully reveal
+  function updateReading(){
+    readings.forEach(function(el){
+      var t = (window.innerHeight*LINE - el.getBoundingClientRect().top) / SPAN;
+      t = Math.max(0, Math.min(1, t));
+      el.style.opacity = t;
+      el.style.transform = 'translateY(' + (1-t)*16 + 'px)';
+      el.querySelectorAll('h2,p').forEach(function(te){
+        te.style.backgroundPosition = (100*(1-t)) + '% 0';
+      });
+    });
+  }
+  var ticking = false;
+  window.addEventListener('scroll', function(){
+    if(!ticking){ requestAnimationFrame(function(){ updateReading(); ticking = false; }); ticking = true; }
+  }, {passive:true});
+  updateReading();
+
+  /* ---- world coverage: live RSS by region, matched to this article's topic ---- */
+  var WC_REGIONS = [
+    {name:'동아시아',   source:'South China Morning Post', feed:'https://www.scmp.com/rss/91/feed', lang:'en'},
+    {name:'중앙아시아', source:'Eurasianet',                feed:'https://eurasianet.org/rss', lang:'en'},
+    {name:'남아시아',   source:'The Hindu',                 feed:'https://www.thehindu.com/news/international/feeder/default.rss', lang:'en'},
+    {name:'동남아시아', source:'Bangkok Post',              feed:'https://www.bangkokpost.com/rss/data/topstories.xml', lang:'en'},
+    {name:'중동',       source:'Al Jazeera',                feed:'https://www.aljazeera.com/xml/rss/all.xml', lang:'en'},
+    {name:'아프리카',   source:'AllAfrica',                 feed:'https://allafrica.com/tools/headlines/rdf/latest/headlines.rdf', lang:'en'},
+    {name:'유럽',       source:'Euronews',                  feed:'https://www.euronews.com/rss?level=theme&name=news', lang:'en'},
+    {name:'아메리카',   source:'Global Voices',             feed:'https://globalvoices.org/-/world/americas/feed/', lang:'en'},
+    {name:'한국',       source:'연합뉴스',                  feed:'https://www.yna.co.kr/rss/news.xml', lang:'ko'},
+    {name:'미국',       source:'The New York Times',        feed:'https://rss.nytimes.com/services/xml/rss/nyt/World.xml', lang:'en'},
+    {name:'일본',       source:'NHK뉴스',                   feed:'https://www3.nhk.or.jp/rss/news/cat0.xml', lang:'ja'}
+  ];
+  var WC_PROXY = 'https://api.allorigins.win/raw?url=';
+  var WC_GOOGLE = {name:'구글 뉴스', source:'Google News', lang:'en'};
+  function wcGoogleFeedUrl(topic){
+    return 'https://news.google.com/rss/search?q=' + encodeURIComponent(topic) + '&hl=en-US&gl=US&ceid=US:en';
+  }
+
+  function wcDetectLang(text){
+    return /[가-힣]/.test(text) ? 'ko' : 'en';
+  }
+  var wcTranslateCache = {};
+  function wcTranslate(text, targetLang){
+    var srcLang = wcDetectLang(text);
+    if(srcLang === targetLang) return Promise.resolve(text);
+    var key = srcLang + '|' + targetLang + ':' + text;
+    if(wcTranslateCache[key]) return wcTranslateCache[key];
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ ctrl.abort(); }, 8000);
+    wcTranslateCache[key] = fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text) + '&langpair=' + srcLang + '|' + targetLang, {signal: ctrl.signal})
+      .then(function(r){ clearTimeout(timer); return r.json(); })
+      .then(function(data){
+        return (data && data.responseData && data.responseData.translatedText) ? data.responseData.translatedText : text;
+      })
+      .catch(function(){ clearTimeout(timer); return text; });
+    return wcTranslateCache[key];
+  }
+  function wcKeywords(text){
+    return (text || '').toLowerCase()
+      .split(/[\s,."'?!:;()\[\]〈〉《》·\-–—]+/)
+      .filter(function(w){ return w.length >= 2; });
+  }
+  function wcScore(item, keywords){
+    var hay = (item.title + ' ' + (item.description || '')).toLowerCase();
+    var score = 0;
+    keywords.forEach(function(k){ if(hay.indexOf(k) !== -1) score++; });
+    return score;
+  }
+  function wcEscape(s){
+    return (s || '').replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function wcParseXML(xmlText){
+    var doc = new DOMParser().parseFromString(xmlText, 'text/xml');
+    if(doc.querySelector('parsererror')) return [];
+    var nodes = doc.querySelectorAll('item');
+    if(nodes.length === 0) nodes = doc.querySelectorAll('entry'); // Atom fallback
+    return Array.from(nodes).map(function(el){
+      var titleEl = el.querySelector('title');
+      var linkEl = el.querySelector('link');
+      var descEl = el.querySelector('description') || el.querySelector('summary');
+      var link = linkEl ? (linkEl.getAttribute('href') || linkEl.textContent) : '';
+      return {
+        title: titleEl ? titleEl.textContent.trim() : '',
+        link: (link || '').trim(),
+        description: descEl ? descEl.textContent.trim() : ''
+      };
+    });
+  }
+
+  var wcPromiseCache = {};
+  function wcFetchOne(region, keywords){
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ ctrl.abort(); }, 8000);
+    return fetch(WC_PROXY + encodeURIComponent(region.feed), {signal: ctrl.signal})
+      .then(function(r){ clearTimeout(timer); return r.text(); })
+      .then(function(xmlText){
+        var items = wcParseXML(xmlText);
+        var best = null, bestScore = 0;
+        items.forEach(function(item){
+          var s = wcScore(item, keywords);
+          if(s > bestScore){ bestScore = s; best = item; }
+        });
+        return {region:region.name, source:region.source, item:best, matched: bestScore > 0};
+      })
+      .catch(function(){ clearTimeout(timer); return {region:region.name, source:region.source, item:null, matched:false, failed:true}; });
+  }
+  function wcFetchAll(topic, onProgress){
+    if(wcPromiseCache[topic]) return wcPromiseCache[topic];
+    var regions = WC_REGIONS.concat([{name:WC_GOOGLE.name, source:WC_GOOGLE.source, feed:wcGoogleFeedUrl(topic), lang:WC_GOOGLE.lang}]);
+    var langs = regions.map(function(r){ return r.lang; }).filter(function(v, i, a){ return a.indexOf(v) === i; });
+    wcPromiseCache[topic] = Promise.all(langs.map(function(lang){
+      return wcTranslate(topic, lang).then(function(t){ return [lang, wcKeywords(t)]; });
+    })).then(function(pairs){
+      var keywordsByLang = {};
+      pairs.forEach(function(p){ keywordsByLang[p[0]] = p[1]; });
+      var total = regions.length;
+      var done = 0;
+      return Promise.all(regions.map(function(region){
+        return wcFetchOne(region, keywordsByLang[region.lang] || wcKeywords(topic)).then(function(r){
+          done++;
+          if(onProgress) onProgress(done, total);
+          return r;
+        });
+      }));
+    });
+    return wcPromiseCache[topic];
+  }
+
+  function wireDivide(detailsEl){
+    var topic = detailsEl.dataset.topic || '';
+    var container = detailsEl.querySelector('.divide-detail');
+    if(!container || wcKeywords(topic).length === 0) return;
+    detailsEl.addEventListener('toggle', function(){
+      if(!detailsEl.open || detailsEl.dataset.loaded) return;
+      detailsEl.dataset.loaded = '1';
+      container.innerHTML = '<div class="wc-loading">전 세계 언론을 확인하는 중… (0/' + (WC_REGIONS.length + 1) + ')</div>';
+      wcFetchAll(topic, function(done, total){
+        var el = container.querySelector('.wc-loading');
+        if(el) el.textContent = '전 세계 언론을 확인하는 중… (' + done + '/' + total + ')';
+      }).then(function(results){
+        var matched = results.filter(function(r){ return r.matched; });
+        if(matched.length === 0){
+          container.innerHTML = '<div class="wc-empty">지금은 이 주제와 일치하는 해외 보도를 찾지 못했어요.</div>';
+          return;
+        }
+        container.innerHTML =
+          '<div class="divide-grid">' +
+          matched.map(function(r, i){
+            return '<div class="divide-card' + (i % 2 ? ' accent' : '') + '">' +
+              '<div class="source-row"><span class="source-badge">' + wcEscape(r.region.slice(0,1)) + '</span>' +
+              '<span>' + wcEscape(r.source) + ' <em>(' + wcEscape(r.region) + ')</em></span></div>' +
+              '<blockquote>' + wcEscape(r.item.title) + '</blockquote>' +
+              '<a class="source-link" href="' + r.item.link + '" target="_blank" rel="noopener">더 알아보기 →</a>' +
+            '</div>';
+          }).join('') +
+          '</div>' +
+          '<div class="wc-note">무료 프록시로 하나씩 순서대로 가져와요. 가끔 느리거나 응답이 없는 곳은 건너뛰어요.</div>';
+      });
+    });
+  }
+
+  function wireSkipped(detailsEl){
+    var topic = detailsEl.dataset.topic || '';
+    var container = detailsEl.querySelector('.skipped-detail');
+    if(!container || wcKeywords(topic).length === 0) return;
+    detailsEl.addEventListener('toggle', function(){
+      if(!detailsEl.open || detailsEl.dataset.loaded) return;
+      detailsEl.dataset.loaded = '1';
+      container.innerHTML = '<div class="wc-loading">전 세계 언론을 확인하는 중… (0/' + (WC_REGIONS.length + 1) + ')</div>';
+      wcFetchAll(topic, function(done, total){
+        var el = container.querySelector('.wc-loading');
+        if(el) el.textContent = '전 세계 언론을 확인하는 중… (' + done + '/' + total + ')';
+      }).then(function(results){
+        var total = results.length;
+        var covered = results.filter(function(r){ return r.matched; });
+        var missed = results.filter(function(r){ return !r.matched; });
+        if(missed.length === 0){
+          container.innerHTML = '<div class="wc-empty">확인한 ' + total + '곳 모두 이 소식을 다뤘어요.</div>';
+          return;
+        }
+        var dots = results.map(function(r){ return '<span class="dot' + (r.matched ? ' on' : '') + '"></span>'; }).join('');
+        container.innerHTML =
+          '<div class="skipped-box">' +
+            '<div class="coverage-dots">' + dots + '</div>' +
+            '<div class="skipped-meta">' + total + '곳 중 ' + covered.length + '곳만 보도했어요</div>' +
+            '<ul class="skipped-list">' +
+            missed.map(function(r){
+              return '<li><div class="skipped-row"><div>' +
+                '<div class="skipped-title">' + wcEscape(r.region) + '에서는 이 소식을 다루지 않았어요</div>' +
+              '</div></div></li>';
+            }).join('') +
+            '</ul>' +
+          '</div>' +
+          '<div class="wc-note">무료 프록시로 하나씩 순서대로 가져와요. 가끔 느리거나 응답이 없는 곳은 건너뛰어요.</div>';
+      });
+    });
+  }
+
+  wireDivide(document.querySelector('.divide'));
+  wireSkipped(document.querySelector('.skipped'));
+</script>
+</body>
+</html>
