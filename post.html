@@ -64,7 +64,7 @@
   }
 
   main{padding:48px 0 100px;}
-  .headline{font-size:32px;line-height:1.4;font-weight:800;margin-bottom:16px;}
+  .headline{font-size:32px;line-height:1.4;font-weight:800;margin-bottom:16px;text-shadow:0 0 28px rgba(255,190,120,.3);}
   .meta{font-size:13px;color:var(--text-muted);margin-bottom:36px;}
 
   .body-content h1,.body-content h2,.body-content h3{margin:1.2em 0 .5em;line-height:1.4;}
@@ -194,6 +194,7 @@
         return;
       }
       renderPost(res.data);
+      db.rpc('increment_views', { post_id: res.data.id });
     });
   }
 
@@ -205,7 +206,7 @@
     titleEl.textContent = post.title;
     var metaEl = document.createElement('div');
     metaEl.className = 'meta';
-    metaEl.textContent = date;
+    metaEl.textContent = post.author_email ? (post.author_email + ' · ' + date) : date;
     var divideEl = document.createElement('div');
     divideEl.innerHTML =
       '<details class="divide" data-topic="' + wcEscape(post.title) + '">' +
@@ -308,15 +309,24 @@
       .catch(function(){ clearTimeout(timer); return text; });
     return wcTranslateCache[key];
   }
-  function wcKeywords(text){
+  var WC_STOPWORDS = {
+    'the':1,'a':1,'an':1,'of':1,'to':1,'in':1,'on':1,'for':1,'and':1,'or':1,'is':1,'are':1,'was':1,'were':1,
+    'with':1,'at':1,'by':1,'from':1,'as':1,'it':1,'its':1,'this':1,'that':1,'be':1,'has':1,'have':1,'will':1,'not':1,
+    '이':1,'그':1,'저':1,'것':1,'수':1,'등':1,'및':1,'을':1,'를':1,'은':1,'는':1,'에':1,'의':1,'가':1,'과':1,'와':1,'도':1,'로':1,'으로':1,'에서':1
+  };
+  function wcTokenize(text){
     return (text || '').toLowerCase()
       .split(/[\s,."'?!:;()\[\]〈〉《》·\-–—]+/)
-      .filter(function(w){ return w.length >= 2; });
+      .filter(function(w){ return w.length >= 3 && !WC_STOPWORDS[w]; });
+  }
+  function wcKeywords(text){
+    return wcTokenize(text);
   }
   function wcScore(item, keywords){
-    var hay = (item.title + ' ' + (item.description || '')).toLowerCase();
+    var haySet = {};
+    wcTokenize(item.title + ' ' + (item.description || '')).forEach(function(w){ haySet[w] = true; });
     var score = 0;
-    keywords.forEach(function(k){ if(hay.indexOf(k) !== -1) score++; });
+    keywords.forEach(function(k){ if(haySet[k]) score++; });
     return score;
   }
   function wcEscape(s){
@@ -349,12 +359,13 @@
       .then(function(r){ clearTimeout(timer); return r.text(); })
       .then(function(xmlText){
         var items = wcParseXML(xmlText);
+        var minScore = keywords.length >= 3 ? 2 : 1;
         var best = null, bestScore = 0;
         items.forEach(function(item){
           var s = wcScore(item, keywords);
           if(s > bestScore){ bestScore = s; best = item; }
         });
-        return {region:region.name, source:region.source, item:best, matched: bestScore > 0};
+        return {region:region.name, source:region.source, item:best, matched: bestScore >= minScore};
       })
       .catch(function(){ clearTimeout(timer); return {region:region.name, source:region.source, item:null, matched:false, failed:true}; });
   }

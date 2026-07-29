@@ -83,7 +83,7 @@
     margin-bottom:64px;
   }
   .thumb{
-    border-radius:14px;aspect-ratio:16/9;
+    display:block;border-radius:14px;aspect-ratio:16/9;
     background:linear-gradient(135deg,#c9822f,#7a3418 60%,#3a1408);
     margin-bottom:18px;
   }
@@ -119,7 +119,21 @@
     font-size:14px;
   }
   .trending li:first-child{padding-top:0;}
-  .rank{font-weight:800;color:var(--amber);width:16px;flex:none;}
+  .trending a:hover{color:var(--amber);}
+  .rank{
+    font-weight:800;color:var(--amber);width:16px;flex:none;
+    text-shadow:0 0 14px color-mix(in srgb, var(--amber) 65%, transparent);
+  }
+  .empty-note{font-size:13px;color:var(--text-muted);padding:16px 0;}
+
+  /* ---- soft grouping glow (Toss-style: low-opacity radial fade instead of drop-shadow) ---- */
+  .content-grid > div:first-child{position:relative;}
+  .content-grid > div:first-child::before{
+    content:'';position:absolute;z-index:-1;
+    top:-50px;left:-70px;width:360px;height:360px;
+    background:radial-gradient(circle, color-mix(in srgb, var(--amber) 16%, transparent), transparent 70%);
+    pointer-events:none;
+  }
 
   .quiz{
     background:var(--surface);border:1px solid var(--surface-border);
@@ -164,13 +178,17 @@
   .feed-card-text{position:absolute;left:16px;right:16px;bottom:16px;z-index:1;}
   .feed-byline{font-size:12px;color:rgba(245,233,218,.75);margin-bottom:6px;}
   .feed-card h3{font-size:16px;font-weight:700;line-height:1.35;color:#fff;}
-  .feed-card:nth-child(1){height:260px;--fc-grad:linear-gradient(160deg,#ffcf8a,#e8823c 60%,#7a3418);}
-  .feed-card:nth-child(2){height:320px;--fc-grad:linear-gradient(160deg,#5a2f8a,#2a1a4a);}
-  .feed-card:nth-child(3){height:300px;--fc-grad:linear-gradient(160deg,#2f6b6b,#123030);}
-  .feed-card:nth-child(4){height:220px;--fc-grad:linear-gradient(160deg,#c9436b,#4a1030);}
-  .feed-card:nth-child(5){height:280px;--fc-grad:linear-gradient(160deg,#e8823c,#3a1408);}
-  .feed-card:nth-child(6){height:240px;--fc-grad:linear-gradient(160deg,#3a6bc9,#0f1a3a);}
+  .feed-card:nth-child(6n+1){height:260px;--fc-grad:linear-gradient(160deg,#ffcf8a,#e8823c 60%,#7a3418);}
+  .feed-card:nth-child(6n+2){height:320px;--fc-grad:linear-gradient(160deg,#5a2f8a,#2a1a4a);}
+  .feed-card:nth-child(6n+3){height:300px;--fc-grad:linear-gradient(160deg,#2f6b6b,#123030);}
+  .feed-card:nth-child(6n+4){height:220px;--fc-grad:linear-gradient(160deg,#c9436b,#4a1030);}
+  .feed-card:nth-child(6n+5){height:280px;--fc-grad:linear-gradient(160deg,#e8823c,#3a1408);}
+  .feed-card:nth-child(6n+0){height:240px;--fc-grad:linear-gradient(160deg,#3a6bc9,#0f1a3a);}
   @media (min-width:900px){ .feed-grid{column-count:3;} }
+
+  /* ---- transient reveal flash (Toss-style: brief gradient brightness pulse on reveal) ---- */
+  @keyframes fc-flash{0%{filter:brightness(1.6) saturate(1.2);}100%{filter:brightness(1);}}
+  .feed-card.in-view{animation:fc-flash .9s ease-out;}
 
   /* ---- scroll reveal ---- */
   .reveal{opacity:0;transform:translateY(16px);transition:opacity .6s ease-out,transform .6s ease-out;}
@@ -216,32 +234,16 @@
 
 <main class="wrap">
 
-  <section class="feature-grid">
-    <a class="feature-main reveal" href="article.html">
-      <div class="thumb"></div>
-      <div class="eyebrow">이 주의 콘텐츠</div>
-      <h1>기사 제목이 여기에 들어갑니다</h1>
-      <p class="excerpt">기사 요약 텍스트가 여기에 두세 줄 정도로 들어갑니다. 실제 콘텐츠로 교체하세요.</p>
-      <span class="btn">이어서 보기</span>
-    </a>
-    <a class="feature-side reveal" href="article.html">
-      <div class="thumb"></div>
-      <div class="eyebrow">칼럼</div>
-      <h2>부제목 기사 제목이 들어갑니다</h2>
-      <p class="excerpt">두 번째 기사 요약 텍스트가 들어갑니다.</p>
-    </a>
+  <section class="feature-grid" id="hero-grid">
+    <div class="feature-main reveal empty-note">아직 등록된 글이 없어요.</div>
   </section>
 
   <section class="content-grid">
     <div>
       <div class="panel-title reveal">지금 많이 보는 콘텐츠</div>
       <div class="panel-sub reveal">사람들이 주목하는 이야기</div>
-      <ol class="trending reveal">
-        <li><span class="rank">1</span>가장 많이 읽힌 기사 제목</li>
-        <li><span class="rank">2</span>두 번째로 많이 읽힌 기사 제목</li>
-        <li><span class="rank">3</span>세 번째로 많이 읽힌 기사 제목</li>
-        <li><span class="rank">4</span>네 번째로 많이 읽힌 기사 제목</li>
-        <li><span class="rank">5</span>다섯 번째로 많이 읽힌 기사 제목</li>
+      <ol class="trending reveal" id="trending-list">
+        <li class="empty-note">아직 조회 기록이 없어요.</li>
       </ol>
 
       <div class="quiz reveal">
@@ -258,80 +260,24 @@
     <div>
       <div class="panel-title reveal">관심 있을 만한 콘텐츠</div>
       <div class="panel-sub reveal">꼼꼼하게 함께 살펴보세요</div>
-      <ul class="card-list">
-        <li class="card-row reveal">
-          <div>
-            <h3>카드 기사 제목이 여기에 들어갑니다</h3>
-            <p class="excerpt">카드 기사 요약 텍스트가 들어갑니다.</p>
-            <div class="meta">읽기 7분</div>
-          </div>
-          <div class="thumb"></div>
-        </li>
-        <li class="card-row reveal">
-          <div>
-            <h3>카드 기사 제목이 여기에 들어갑니다</h3>
-            <p class="excerpt">카드 기사 요약 텍스트가 들어갑니다.</p>
-            <div class="meta">읽기 6분</div>
-          </div>
-          <div class="thumb"></div>
-        </li>
-        <li class="card-row reveal">
-          <div>
-            <h3>카드 기사 제목이 여기에 들어갑니다</h3>
-            <p class="excerpt">카드 기사 요약 텍스트가 들어갑니다.</p>
-            <div class="meta">읽기 5분</div>
-          </div>
-          <div class="thumb"></div>
-        </li>
+      <ul class="card-list" id="card-list">
+        <li class="empty-note">아직 등록된 글이 없어요. <a href="write.html">첫 글을 써보세요</a></li>
       </ul>
     </div>
   </section>
 
   <section class="feed">
     <div class="panel-title reveal">최신 콘텐츠</div>
-    <div class="panel-sub reveal">에디터들이 새로 올린 이야기</div>
-    <div class="feed-grid">
-      <a class="feed-card reveal" href="article.html">
-        <div class="feed-card-text">
-          <div class="feed-byline">김에디터 · Editor</div>
-          <h3>피드 기사 제목이 두 줄 정도로 들어갑니다</h3>
-        </div>
-      </a>
-      <a class="feed-card reveal" href="article.html">
-        <div class="feed-card-text">
-          <div class="feed-byline">이에디터 · Writer</div>
-          <h3>피드 기사 제목이 들어갑니다</h3>
-        </div>
-      </a>
-      <a class="feed-card reveal" href="article.html">
-        <div class="feed-card-text">
-          <div class="feed-byline">박에디터 · Designer</div>
-          <h3>피드 기사 제목이 두 줄 정도로 들어갑니다</h3>
-        </div>
-      </a>
-      <a class="feed-card reveal" href="article.html">
-        <div class="feed-card-text">
-          <div class="feed-byline">최에디터 · Editor</div>
-          <h3>피드 기사 제목이 들어갑니다</h3>
-        </div>
-      </a>
-      <a class="feed-card reveal" href="article.html">
-        <div class="feed-card-text">
-          <div class="feed-byline">정에디터 · Writer</div>
-          <h3>피드 기사 제목이 두 줄 정도로 들어갑니다</h3>
-        </div>
-      </a>
-      <a class="feed-card reveal" href="article.html">
-        <div class="feed-card-text">
-          <div class="feed-byline">한에디터 · Designer</div>
-          <h3>피드 기사 제목이 들어갑니다</h3>
-        </div>
-      </a>
+    <div class="panel-sub reveal">방금 올라온 이야기</div>
+    <div class="feed-grid" id="feed-grid">
+      <div class="empty-note">아직 등록된 글이 없어요.</div>
     </div>
   </section>
 
 </main>
 
+<script src="vendor/supabase.min.js"></script>
+<script src="supabase-config.js"></script>
 <script>
   var SUN = '<circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="4" y1="12" x2="2" y2="12"/><line x1="22" y1="12" x2="20" y2="12"/><line x1="19.07" y1="4.93" x2="17.66" y2="6.34"/><line x1="6.34" y1="17.66" x2="4.93" y2="19.07"/><line x1="19.07" y1="19.07" x2="17.66" y2="17.66"/><line x1="6.34" y1="6.34" x2="4.93" y2="4.93"/>';
   var MOON = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
@@ -346,15 +292,92 @@
     applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
   });
 
-  var targets = document.querySelectorAll('.reveal');
   function checkReveal(){
-    targets.forEach(function(el){
+    document.querySelectorAll('.reveal').forEach(function(el){
       if(el.classList.contains('in-view')) return;
       if(el.getBoundingClientRect().top < window.innerHeight*0.9){ el.classList.add('in-view'); }
     });
   }
   checkReveal();
   window.addEventListener('scroll', checkReveal, {passive:true});
+
+  /* ---- wire real content from supabase ---- */
+  function excerptOf(body, len){
+    var plain = (body || '')
+      .replace(/```[\s\S]*?```/g, ' ')
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/[#*_>`~-]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return plain.length > len ? plain.slice(0, len) + '…' : plain;
+  }
+  function readMinutes(body){
+    return Math.max(1, Math.round((body || '').length / 500));
+  }
+  function esc(s){
+    return (s || '').replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  db.from('posts').select('id,title,body,views,created_at,author_email').order('created_at', {ascending:false}).limit(20).then(function(res){
+    var posts = (res.data || []);
+    renderHero(posts.slice(0, 2));
+    renderTrending(posts.slice().sort(function(a,b){ return (b.views||0) - (a.views||0); }).slice(0, 5));
+    renderCards(posts.slice(2, 5));
+    renderFeed(posts.slice(0, 6));
+    checkReveal();
+  });
+
+  function renderHero(posts){
+    var grid = document.getElementById('hero-grid');
+    if(posts.length === 0) return;
+    grid.innerHTML = posts.map(function(p, i){
+      var isMain = i === 0;
+      return '<a class="' + (isMain ? 'feature-main' : 'feature-side') + ' reveal" href="post.html?id=' + p.id + '">' +
+        '<div class="thumb"></div>' +
+        '<div class="eyebrow">' + (isMain ? '이 주의 콘텐츠' : '최근 글') + '</div>' +
+        '<' + (isMain ? 'h1' : 'h2') + '>' + esc(p.title) + '</' + (isMain ? 'h1' : 'h2') + '>' +
+        '<p class="excerpt">' + esc(excerptOf(p.body, isMain ? 90 : 60)) + '</p>' +
+        (isMain ? '<span class="btn">이어서 보기</span>' : '') +
+      '</a>';
+    }).join('');
+  }
+  function renderTrending(posts){
+    var list = document.getElementById('trending-list');
+    if(posts.length === 0) return;
+    list.innerHTML = posts.map(function(p, i){
+      return '<li><span class="rank">' + (i+1) + '</span><a href="post.html?id=' + p.id + '">' + esc(p.title) + '</a></li>';
+    }).join('');
+  }
+  function renderCards(posts){
+    var list = document.getElementById('card-list');
+    if(posts.length === 0) return;
+    list.innerHTML = posts.map(function(p){
+      return '<li class="card-row reveal">' +
+        '<div>' +
+          '<h3><a href="post.html?id=' + p.id + '">' + esc(p.title) + '</a></h3>' +
+          '<p class="excerpt">' + esc(excerptOf(p.body, 50)) + '</p>' +
+          '<div class="meta">읽기 ' + readMinutes(p.body) + '분</div>' +
+        '</div>' +
+        '<a class="thumb" href="post.html?id=' + p.id + '"></a>' +
+      '</li>';
+    }).join('');
+  }
+  function renderFeed(posts){
+    var grid = document.getElementById('feed-grid');
+    if(posts.length === 0) return;
+    grid.innerHTML = posts.map(function(p){
+      var date = new Date(p.created_at).toLocaleDateString('ko-KR', { month:'long', day:'numeric' });
+      return '<a class="feed-card reveal" href="post.html?id=' + p.id + '">' +
+        '<div class="feed-card-text">' +
+          '<div class="feed-byline">' + esc(p.author_email || '익명') + ' · ' + date + '</div>' +
+          '<h3>' + esc(p.title) + '</h3>' +
+        '</div>' +
+      '</a>';
+    }).join('');
+  }
 </script>
 </body>
 </html>
