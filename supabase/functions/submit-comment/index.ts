@@ -178,7 +178,12 @@ const WC_STOPWORDS = {
 function wcTokenize(text) {
   return (text || '').toLowerCase()
     .split(/[\s,."'?!:;()\[\]〈〉《》·\-–—]+/)
-    .filter((w) => w.length >= 3 && !WC_STOPWORDS[w]);
+    .filter((w) => {
+      // CJK words are meaningfully short (names, places are often 2 chars) - the
+      // length>=3 rule only makes sense for filtering short English function words.
+      const minLen = /[가-힣ぁ-んァ-ヶ一-龯]/.test(w) ? 2 : 3;
+      return w.length >= minLen && !WC_STOPWORDS[w];
+    });
 }
 function wcScore(item, keywords) {
   const haySet = new Set(wcTokenize(item.title + ' ' + (item.description || '')));
