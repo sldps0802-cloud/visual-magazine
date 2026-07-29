@@ -156,16 +156,15 @@
 </nav>
 
 <main class="wrap">
-  <p class="notice">여기 올린 글은 모든 방문자에게 공개돼요. 글을 쓰려면 로그인이 필요해요.</p>
+  <p class="notice">여기 올린 글은 모든 방문자에게 공개돼요. 글쓰기는 관리자만 할 수 있어요.</p>
 
   <div class="auth-panel" id="auth-panel">
-    <div class="pane-label">로그인 / 회원가입</div>
+    <div class="pane-label">관리자 로그인</div>
     <input type="email" id="auth-email" placeholder="이메일" autocomplete="username">
-    <input type="password" id="auth-password" placeholder="비밀번호 (6자 이상)" autocomplete="current-password">
+    <input type="password" id="auth-password" placeholder="비밀번호" autocomplete="current-password">
     <div class="auth-msg" id="auth-msg"></div>
     <div class="auth-row">
       <button class="action save-btn" id="login-btn">로그인</button>
-      <button class="action clear-btn" id="signup-btn">회원가입</button>
     </div>
   </div>
 
@@ -250,16 +249,6 @@
     authMsg.textContent = '로그인 중…';
     db.auth.signInWithPassword({ email: email, password: password }).then(function(res){
       authMsg.textContent = res.error ? res.error.message : '';
-    });
-  });
-  document.getElementById('signup-btn').addEventListener('click', function(){
-    var email = document.getElementById('auth-email').value.trim();
-    var password = document.getElementById('auth-password').value;
-    if(password.length < 6){ authMsg.textContent = '비밀번호는 6자 이상이어야 해요.'; return; }
-    authMsg.textContent = '가입 처리 중…';
-    db.auth.signUp({ email: email, password: password }).then(function(res){
-      if(res.error){ authMsg.textContent = res.error.message; return; }
-      authMsg.textContent = res.data.session ? '가입 완료!' : '가입 확인 이메일을 보냈어요. 확인 후 로그인해주세요.';
     });
   });
   document.getElementById('logout-btn').addEventListener('click', function(){
