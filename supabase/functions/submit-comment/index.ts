@@ -133,11 +133,36 @@ async function classifyIp(ip) {
   return { prefix: parts[0] + '.' + parts[1], country: match ? match[2] : null, isVpn };
 }
 
+// '엇갈린 시선/놓친 이야기'가 쓰는 RSS 소스 도메인만 허용 (오픈 프록시로 악용되는 것 방지)
+const RSS_HOST_ALLOWLIST = [
+  'scmp.com', 'eurasianet.org', 'thehindu.com', 'bangkokpost.com', 'aljazeera.com',
+  'allafrica.com', 'euronews.com', 'globalvoices.org', 'yna.co.kr', 'nytimes.com',
+  'nhk.or.jp', 'news.google.com',
+];
+function isAllowedRssUrl(urlStr) {
+  try {
+    const host = new URL(urlStr).hostname;
+    return RSS_HOST_ALLOWLIST.some((d) => host === d || host.endsWith('.' + d));
+  } catch {
+    return false;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
 
   try {
     const body = await req.json();
+
+    // RSS 프록시: VPN/국가 판별이 필요 없는 단순 읽기 전용 요청이라 먼저 처리
+    if (body.action === 'fetch-rss') {
+      const feedUrl = String(body.url || '');
+      if (!isAllowedRssUrl(feedUrl)) throw new Error('허용되지 않은 URL이에요.');
+      const r = await fetch(feedUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VisualMagazineBot/1.0)' } });
+      const text = await r.text();
+      return new Response(text, { headers: { ...CORS_HEADERS, 'Content-Type': 'text/plain; charset=utf-8' } });
+    }
+
     const ip = detectIp(req);
     await loadDatasets();
     const { isVpn, prefix, country } = await classifyIp(ip);

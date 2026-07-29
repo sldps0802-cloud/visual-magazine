@@ -675,6 +675,23 @@
     {name:'일본',       source:'NHK뉴스',                   feed:'https://www3.nhk.or.jp/rss/news/cat0.xml', lang:'ja'}
   ];
   var WC_PROXY = 'https://api.allorigins.win/raw?url=';
+  var WC_FN_URL = SUPABASE_URL + '/functions/v1/super-action';
+  // 서버(Edge Function)로 직접 가져오기를 우선 시도, 실패하면 공개 CORS 프록시로 대체
+  function wcFetchXml(url){
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ ctrl.abort(); }, 8000);
+    return fetch(WC_FN_URL, {
+      method: 'POST', signal: ctrl.signal,
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY },
+      body: JSON.stringify({ action: 'fetch-rss', url: url })
+    }).then(function(r){ clearTimeout(timer); if(!r.ok) throw new Error('edge fn failed'); return r.text(); })
+      .catch(function(){
+        var ctrl2 = new AbortController();
+        var timer2 = setTimeout(function(){ ctrl2.abort(); }, 8000);
+        return fetch(WC_PROXY + encodeURIComponent(url), {signal: ctrl2.signal})
+          .then(function(r){ clearTimeout(timer2); return r.text(); });
+      });
+  }
   var WC_GOOGLE = {name:'구글 뉴스', source:'Google News', lang:'en'};
   function wcGoogleFeedUrl(topic){
     return 'https://news.google.com/rss/search?q=' + encodeURIComponent(topic) + '&hl=en-US&gl=US&ceid=US:en';
@@ -743,10 +760,7 @@
   }
   var wcPromiseCache = {};
   function wcFetchOne(region, keywords){
-    var ctrl = new AbortController();
-    var timer = setTimeout(function(){ ctrl.abort(); }, 8000);
-    return fetch(WC_PROXY + encodeURIComponent(region.feed), {signal: ctrl.signal})
-      .then(function(r){ clearTimeout(timer); return r.text(); })
+    return wcFetchXml(region.feed)
       .then(function(xmlText){
         var items = wcParseXML(xmlText);
         var minScore = keywords.length >= 3 ? 2 : 1;
@@ -757,7 +771,7 @@
         });
         return {region:region.name, source:region.source, item:best, matched: bestScore >= minScore};
       })
-      .catch(function(){ clearTimeout(timer); return {region:region.name, source:region.source, item:null, matched:false, failed:true}; });
+      .catch(function(){ return {region:region.name, source:region.source, item:null, matched:false, failed:true}; });
   }
   function wcFetchAll(topic, onProgress){
     if(wcPromiseCache[topic]) return wcPromiseCache[topic];
