@@ -331,16 +331,29 @@
     });
   }
 
-  /* ---- one-shot text-sweep reveal: triggers once when a block enters view ---- */
+  /* ---- one-shot reveal, one block at a time in document order ---- */
   function wireReadingReveal(){
-    var io = new IntersectionObserver(function(entries){
-      entries.forEach(function(entry){
-        if(!entry.isIntersecting) return;
-        entry.target.classList.add('reveal-in');
-        io.unobserve(entry.target);
-      });
-    }, {threshold:0.3});
-    document.querySelectorAll('.reading').forEach(function(el){ io.observe(el); });
+    var blocks = Array.from(document.querySelectorAll('.reading'));
+    var i = 0;
+    function next(){
+      if(i >= blocks.length) return;
+      var el = blocks[i++];
+      var io = new IntersectionObserver(function(entries){
+        entries.forEach(function(entry){
+          if(!entry.isIntersecting) return;
+          io.unobserve(el);
+          el.classList.add('reveal-in');
+          setTimeout(next, blockRevealDuration(el));
+        });
+      }, {threshold:0.3});
+      io.observe(el);
+    }
+    next();
+  }
+  function blockRevealDuration(el){
+    if(!el.classList.contains('reading-lines')) return 600;
+    var wordCount = el.querySelectorAll('.word').length;
+    return Math.min((wordCount - 1) * 30, 900) + 500 + 100;
   }
 
   /* ---- world coverage: live RSS by region, matched to this post's title ---- */
