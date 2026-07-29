@@ -90,6 +90,11 @@
     animation:word-reveal .5s cubic-bezier(.34,1.56,.64,1) both;
     animation-delay:min(calc(var(--i) * 30ms), 900ms);
   }
+  /* past the grace period: just show final text, no gradient/animation */
+  .body-content .reading.reveal-instant{transition:none;}
+  .body-content .reading-lines.reveal-instant .word{
+    animation:none;color:var(--text);opacity:1;
+  }
   @keyframes word-reveal{
     0%{color:var(--text-muted);opacity:.5;}
     55%{color:var(--amber);opacity:1;}
@@ -332,40 +337,38 @@
   }
 
   /* ---- one-shot reveal, one block at a time in document order.
-     after a 2.5s grace period, stop making the reader wait on the queue:
-     catch up everything already scrolled past, and stop gating what's ahead. ---- */
+     after a 2.5s grace period, drop the scroll/queue logic entirely and
+     just show whatever's left in its normal color, no animation. ---- */
   function wireReadingReveal(){
     var blocks = Array.from(document.querySelectorAll('.reading'));
     var revealed = new Array(blocks.length).fill(false);
-    var fastMode = false;
+    var stopped = false;
+    var activeIO = null;
     var i = 0;
 
-    function revealBlock(el, idx){
-      if(revealed[idx]) return;
-      revealed[idx] = true;
-      el.classList.add('reveal-in');
-    }
     function next(){
-      if(i >= blocks.length) return;
+      if(stopped || i >= blocks.length) return;
       var idx = i++;
       var el = blocks[idx];
-      if(revealed[idx]){ next(); return; }
-      var io = new IntersectionObserver(function(entries){
+      activeIO = new IntersectionObserver(function(entries){
         entries.forEach(function(entry){
           if(!entry.isIntersecting) return;
-          io.unobserve(el);
-          revealBlock(el, idx);
-          setTimeout(next, fastMode ? 0 : blockRevealDuration(el));
+          activeIO.unobserve(el);
+          revealed[idx] = true;
+          el.classList.add('reveal-in');
+          setTimeout(next, blockRevealDuration(el));
         });
       }, {threshold:0.3});
-      io.observe(el);
+      activeIO.observe(el);
     }
     next();
 
     setTimeout(function(){
-      fastMode = true;
+      stopped = true;
+      if(activeIO) activeIO.disconnect();
       blocks.forEach(function(el, idx){
-        if(!revealed[idx] && el.getBoundingClientRect().top < window.innerHeight) revealBlock(el, idx);
+        if(revealed[idx]) return;
+        el.classList.add('reveal-in', 'reveal-instant');
       });
     }, 2500);
   }
