@@ -90,10 +90,11 @@
     animation:word-reveal .5s cubic-bezier(.34,1.56,.64,1) both;
     animation-delay:min(calc(var(--i) * 30ms), 900ms);
   }
-  /* past the grace period: just show final text, no gradient/animation */
-  .body-content .reading.reveal-instant{transition:none;}
+  /* past the grace period: no gradient sweep, just a quick smooth fade to normal color */
   .body-content .reading-lines.reveal-instant .word{
-    animation:none;color:var(--text);opacity:1;
+    animation:none;
+    transition:color .25s ease-out,opacity .25s ease-out;
+    color:var(--text);opacity:1;
   }
   @keyframes word-reveal{
     0%{color:var(--text-muted);opacity:.5;}
@@ -370,7 +371,7 @@
         if(revealed[idx]) return;
         el.classList.add('reveal-in', 'reveal-instant');
       });
-    }, 2500);
+    }, 1700);
   }
   function blockRevealDuration(el){
     if(!el.classList.contains('reading-lines')) return 600;
