@@ -19,6 +19,7 @@
     --btn-text:#2a1206;
     --word-step:30ms;
     --word-cap:900ms;
+    --word-dur:.5s;
   }
   :root[data-theme="light"]{
     --gold:#c97a2e;
@@ -89,14 +90,8 @@
   .body-content .reading.reading-lines{opacity:1;transform:none;transition:none;}
   .body-content .word{display:inline-block;color:var(--text-muted);opacity:.5;}
   .body-content .reading-lines.reveal-in .word{
-    animation:word-reveal .5s cubic-bezier(.34,1.56,.64,1) both;
+    animation:word-reveal var(--word-dur,.5s) cubic-bezier(.34,1.56,.64,1) both;
     animation-delay:min(calc(var(--i) * var(--word-step)), var(--word-cap));
-  }
-  /* past the grace period: no gradient sweep, just a quick smooth fade to normal color */
-  .body-content .reading-lines.reveal-instant .word{
-    animation:none;
-    transition:color .25s ease-out,opacity .25s ease-out;
-    color:var(--text);opacity:1;
   }
   @keyframes word-reveal{
     0%{color:var(--text-muted);opacity:.5;}
@@ -340,31 +335,31 @@
   }
 
   /* ---- one-shot reveal, one block at a time in document order.
-     the cutover to "no wait, instant" lives INSIDE this same queue (not a
-     separate timer), so it can never jump ahead of a block that's still
-     mid-gradient: from 1s the gradient itself speeds up, and only a block
-     whose turn comes up at/after 1.7s skips the gradient entirely. ---- */
+     always the same word-reveal animation, just three speed tiers ramping
+     up over time (normal -> fast -> instant) so it's one continuous
+     acceleration instead of a hard cut to a different style. lives inside
+     the same queue so a later block can never overtake one still mid-flight. ---- */
+  var TIERS = {
+    normal:  {step:30, cap:900, dur:500,  blockDur:600},
+    fast:    {step:6,  cap:150, dur:300,  blockDur:200},
+    instant: {step:0,  cap:0,   dur:150,  blockDur:100}
+  };
   function wireReadingReveal(){
     var blocks = Array.from(document.querySelectorAll('.reading'));
     var startTime = Date.now();
     var i = 0;
 
+    function tierFor(t){ return t >= 1700 ? 'instant' : (t >= 1000 ? 'fast' : 'normal'); }
+
     function next(){
       if(i >= blocks.length) return;
       var idx = i++;
       var el = blocks[idx];
-
-      if(Date.now() - startTime >= 1700){
-        el.classList.add('reveal-in', 'reveal-instant');
-        setTimeout(next, 0);
-        return;
-      }
-
       var io = new IntersectionObserver(function(entries){
         entries.forEach(function(entry){
           if(!entry.isIntersecting) return;
           io.unobserve(el);
-          if(Date.now() - startTime >= 1000) setGradientSpeed(true);
+          setGradientSpeed(tierFor(Date.now() - startTime));
           el.classList.add('reveal-in');
           setTimeout(next, blockRevealDuration(el));
         });
@@ -373,18 +368,20 @@
     }
     next();
   }
-  var gradientFast = false;
-  function setGradientSpeed(fast){
-    if(gradientFast === fast) return;
-    gradientFast = fast;
-    document.documentElement.style.setProperty('--word-step', fast ? '6ms' : '30ms');
-    document.documentElement.style.setProperty('--word-cap', fast ? '150ms' : '900ms');
+  var currentTier = 'normal';
+  function setGradientSpeed(tier){
+    if(currentTier === tier) return;
+    currentTier = tier;
+    var cfg = TIERS[tier];
+    document.documentElement.style.setProperty('--word-step', cfg.step + 'ms');
+    document.documentElement.style.setProperty('--word-cap', cfg.cap + 'ms');
+    document.documentElement.style.setProperty('--word-dur', cfg.dur + 'ms');
   }
   function blockRevealDuration(el){
-    if(!el.classList.contains('reading-lines')) return gradientFast ? 200 : 600;
+    var cfg = TIERS[currentTier];
+    if(!el.classList.contains('reading-lines')) return cfg.blockDur;
     var wordCount = el.querySelectorAll('.word').length;
-    var step = gradientFast ? 6 : 30, cap = gradientFast ? 150 : 900;
-    return Math.min((wordCount - 1) * step, cap) + 500 + 100;
+    return Math.min((wordCount - 1) * cfg.step, cfg.cap) + cfg.dur + 100;
   }
 
   /* ---- world coverage: live RSS by region, matched to this post's title ---- */
