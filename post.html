@@ -75,21 +75,25 @@
   .body-content code{background:var(--surface);padding:2px 6px;border-radius:4px;font-size:14px;}
   .body-content img{max-width:100%;border-radius:10px;}
 
-  /* ---- one-shot text-sweep reveal on enter (bouncy ease) ---- */
+  /* ---- one-shot reveal on enter: whole-block fade for non-text blocks ---- */
   .body-content .reading{
     opacity:0;transform:translateY(16px);
-    transition:opacity .6s cubic-bezier(.34,1.56,.64,1),transform .6s cubic-bezier(.34,1.56,.64,1),background-position .8s cubic-bezier(.34,1.56,.64,1);
-  }
-  .body-content .reading:is(p,h1,h2,h3,h4,blockquote){
-    background-image:linear-gradient(90deg, var(--text) 50%, var(--bg-mid) 50%);
-    background-size:200% 100%;
-    background-position:100% 0;
-    -webkit-background-clip:text;
-            background-clip:text;
-    color:transparent;
+    transition:opacity .6s cubic-bezier(.34,1.56,.64,1),transform .6s cubic-bezier(.34,1.56,.64,1);
   }
   .body-content .reading.reveal-in{
-    opacity:1;transform:translateY(0);background-position:0% 0;
+    opacity:1;transform:translateY(0);
+  }
+  /* ---- word-by-word left-to-right sweep for paragraph text ---- */
+  .body-content .reading.reading-lines{opacity:1;transform:none;transition:none;}
+  .body-content .word{display:inline-block;color:var(--text-muted);opacity:.5;}
+  .body-content .reading-lines.reveal-in .word{
+    animation:word-reveal .5s cubic-bezier(.34,1.56,.64,1) both;
+    animation-delay:min(calc(var(--i) * 30ms), 900ms);
+  }
+  @keyframes word-reveal{
+    0%{color:var(--text-muted);opacity:.5;}
+    55%{color:var(--amber);opacity:1;}
+    100%{color:var(--text);opacity:1;}
   }
 
   .not-found{padding:80px 0;text-align:center;color:var(--text-muted);}
@@ -283,7 +287,13 @@
     var bodyEl = document.createElement('div');
     bodyEl.className = 'body-content';
     bodyEl.innerHTML = DOMPurify.sanitize(marked.parse(post.body));
-    Array.from(bodyEl.children).forEach(function(el){ el.classList.add('reading'); });
+    Array.from(bodyEl.children).forEach(function(el){
+      el.classList.add('reading');
+      if(/^(P|H1|H2|H3|H4|BLOCKQUOTE)$/.test(el.tagName)){
+        el.classList.add('reading-lines');
+        splitIntoWords(el);
+      }
+    });
     main.appendChild(titleEl);
     main.appendChild(metaEl);
     main.appendChild(divideEl);
@@ -292,6 +302,33 @@
 
     wireWorldCoverage(post, main.querySelector('.divide'), main.querySelector('.skipped'));
     wireReadingReveal();
+  }
+
+  /* ---- wraps each word (or inline element) in its own span with a stagger index,
+     so CSS can animate the reveal word-by-word, left to right, line by line ---- */
+  function splitIntoWords(el){
+    var i = 0;
+    Array.from(el.childNodes).forEach(function(node){
+      if(node.nodeType === Node.TEXT_NODE){
+        var frag = document.createDocumentFragment();
+        node.textContent.split(/(\s+)/).forEach(function(part){
+          if(part === '') return;
+          if(/^\s+$/.test(part)){ frag.appendChild(document.createTextNode(part)); return; }
+          var span = document.createElement('span');
+          span.className = 'word';
+          span.style.setProperty('--i', i++);
+          span.textContent = part;
+          frag.appendChild(span);
+        });
+        el.replaceChild(frag, node);
+      } else if(node.nodeType === Node.ELEMENT_NODE){
+        var wrapper = document.createElement('span');
+        wrapper.className = 'word';
+        wrapper.style.setProperty('--i', i++);
+        el.replaceChild(wrapper, node);
+        wrapper.appendChild(node);
+      }
+    });
   }
 
   /* ---- one-shot text-sweep reveal: triggers once when a block enters view ---- */
