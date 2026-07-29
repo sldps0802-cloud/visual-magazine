@@ -174,6 +174,12 @@ const WC_STOPWORDS = {
   with:1, at:1, by:1, from:1, as:1, it:1, its:1, this:1, that:1, be:1, has:1, have:1, will:1, not:1,
   '이':1, '그':1, '저':1, '것':1, '수':1, '등':1, '및':1, '을':1, '를':1, '은':1, '는':1, '에':1, '의':1,
   '가':1, '과':1, '와':1, '도':1, '로':1, '으로':1, '에서':1,
+  // 흔한 직함/역할 단어는 그 자체로는 이 사건 특정적이지 않아서, 단독 매칭 시 무관한 기사와
+  // 잘못 매칭되기 쉬움 (예: "ambassador"가 들어간 전혀 다른 외교 기사) - 걸러내서 이름/고유명사
+  // 같은 진짜 특정적인 단어로만 매칭되게 함
+  ambassador:1, minister:1, president:1, chairman:1, chairwoman:1, ceo:1, chief:1,
+  spokesperson:1, spokesman:1, official:1, envoy:1, secretary:1, director:1, governor:1,
+  senator:1, congressman:1, congresswoman:1, representative:1, delegate:1, prime:1,
 };
 function wcTokenize(text) {
   return (text || '').toLowerCase()
