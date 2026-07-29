@@ -180,6 +180,22 @@
   .chevron{color:var(--text-muted);flex:none;margin-top:2px;}
   @media (min-width:600px){ .divide-grid{grid-template-columns:1fr 1fr;} }
 
+  /* ---- soft nudge from 엇갈린 시선 toward 놓친 이야기 ---- */
+  .wc-popup{
+    max-height:0;opacity:0;overflow:hidden;margin-top:0;
+    background:var(--surface);border:1px solid var(--surface-border);border-radius:12px;
+    transition:max-height .4s ease-out,opacity .4s ease-out,margin-top .4s ease-out;
+  }
+  .wc-popup.show{max-height:200px;opacity:1;margin-top:12px;padding:14px 16px;}
+  .wc-popup-text{font-size:13px;line-height:1.6;color:var(--text);}
+  .wc-popup-text strong{color:var(--amber);}
+  .wc-popup-actions{display:flex;gap:8px;margin-top:10px;justify-content:flex-end;}
+  .wc-popup-actions button{
+    font-size:12px;padding:6px 14px;border-radius:999px;font-family:inherit;cursor:pointer;
+  }
+  .wc-popup-close{background:none;border:1px solid var(--surface-border);color:var(--text-muted);}
+  .wc-popup-confirm{background:var(--amber);border:none;color:#fff;font-weight:700;}
+
   /* ---- engagement bar + comments ---- */
   .engage-bar{
     display:flex;align-items:center;gap:20px;padding:16px 0;
@@ -361,6 +377,10 @@
     main.appendChild(titleEl);
     main.appendChild(metaEl);
     main.appendChild(divideEl);
+    var wcPopup = document.createElement('div');
+    wcPopup.className = 'wc-popup';
+    wcPopup.id = 'wc-popup';
+    main.appendChild(wcPopup);
     main.appendChild(bodyEl);
     var engageEl = document.createElement('div');
     engageEl.innerHTML =
@@ -740,10 +760,41 @@
         var container = el.querySelector('.divide-detail') || el.querySelector('.skipped-detail');
         container.innerHTML = '<div class="wc-loading">불러오는 중…</div>';
         wcLoadCoverage(post.id).then(function(results){
-          if(isDivide) wcRenderDivide(container, results); else wcRenderSkipped(container, results);
+          if(isDivide){
+            wcRenderDivide(container, results);
+            wcMaybeShowPopup(results, skippedEl);
+          } else {
+            wcRenderSkipped(container, results);
+          }
         });
       });
     });
+  }
+  function wcMaybeShowPopup(results, skippedEl){
+    var matched = results.filter(function(r){ return r.matched; });
+    if(matched.length === 0) return;
+    var pick = matched[0];
+    var popup = document.getElementById('wc-popup');
+    setTimeout(function(){
+      popup.innerHTML =
+        '<div class="wc-popup-text"><strong>' + wcEscape(pick.source) + '</strong>은 <em>' + wcEscape(pick.item.title) + '</em>에 집중했어요</div>' +
+        '<div class="wc-popup-actions">' +
+          '<button class="wc-popup-close" id="wc-popup-close">닫기</button>' +
+          '<button class="wc-popup-confirm" id="wc-popup-confirm">확인하기</button>' +
+        '</div>';
+      popup.classList.add('show');
+      document.getElementById('wc-popup-close').addEventListener('click', function(){
+        popup.classList.remove('show');
+      });
+      document.getElementById('wc-popup-confirm').addEventListener('click', function(){
+        popup.classList.remove('show');
+        if(skippedEl){
+          skippedEl.open = true;
+          skippedEl.dispatchEvent(new Event('toggle'));
+          skippedEl.scrollIntoView({behavior:'smooth', block:'center'});
+        }
+      });
+    }, 600);
   }
 </script>
 </body>

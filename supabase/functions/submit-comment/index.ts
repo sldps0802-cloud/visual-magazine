@@ -254,9 +254,11 @@ async function refreshCoverageForPost(supabase, post) {
   }
   const results = await Promise.all(regions.map(async (region) => {
     const { item, matched } = await wcFetchRegion(region.feed, keywordsByLang[region.lang] || wcTokenize(topic));
+    // 한국어 화면에 보여줄 거라 원문이 외국어면 한국어로 번역해서 저장 (원문은 링크로 확인 가능)
+    const displayTitle = item && region.lang !== 'ko' ? await wcTranslate(item.title, 'ko') : item?.title;
     return {
       post_id: post.id, region: region.name, source: region.source,
-      matched, item_title: item?.title || null, item_link: item?.link || null,
+      matched, item_title: displayTitle || null, item_link: item?.link || null,
       updated_at: new Date().toISOString(),
     };
   }));
