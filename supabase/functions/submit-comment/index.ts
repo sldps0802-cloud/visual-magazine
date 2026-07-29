@@ -167,10 +167,31 @@ Deno.serve(async (req) => {
       const postId = Number(body.post_id);
       const nickname = String(body.nickname || '').trim().slice(0, 20);
       const avatarSeed = String(body.avatar_seed || '').trim().slice(0, 40);
-      const text = String(body.body || '').trim().slice(0, 500);
+      const text = String(body.body || '').trim().slice(0, 100);
       if (!postId || !nickname || !text) throw new Error('입력값이 비어있어요.');
+
+      // 도배 방지: 같은 IP는 짧은 시간 안에 연속으로 못 올림
+      const RATE_LIMIT_SECONDS = 15;
+      const { data: rl } = await supabase.from('comment_rate_limit').select('last_at').eq('ip', ip).maybeSingle();
+      if (rl && Date.now() - new Date(rl.last_at).getTime() < RATE_LIMIT_SECONDS * 1000) {
+        return new Response(JSON.stringify({ error: '너무 빠르게 연속 작성했어요. 잠시 후 다시 시도해주세요.' }), {
+          status: 429, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        });
+      }
+      await supabase.from('comment_rate_limit').upsert({ ip, last_at: new Date().toISOString() });
+
+      // 닉네임이 이 글에서 이미 쓰였으면 뒤에 숫자를 붙여 구분 (다정한다람쥐 -> 다정한다람쥐2)
+      const { data: existingRows } = await supabase.from('comments').select('nickname').eq('post_id', postId);
+      const existingNames = new Set((existingRows || []).map((r) => r.nickname));
+      let finalNickname = nickname;
+      if (existingNames.has(finalNickname)) {
+        let n = 2;
+        while (existingNames.has(nickname + n)) n++;
+        finalNickname = nickname + n;
+      }
+
       const { data, error } = await supabase.from('comments').insert({
-        post_id: postId, nickname, avatar_seed: avatarSeed, body: text,
+        post_id: postId, nickname: finalNickname, avatar_seed: avatarSeed, body: text,
         ip_prefix: prefix, country,
       }).select().single();
       if (error) throw error;

@@ -381,7 +381,7 @@
           '<button class="info-btn" id="info-btn" aria-label="안내">i</button>' +
         '</div>' +
         '<div class="comment-input-row">' +
-          '<input type="text" class="comment-input" id="comment-input" placeholder="댓글을 남겨보세요" maxlength="500">' +
+          '<input type="text" class="comment-input" id="comment-input" placeholder="댓글을 남겨보세요" maxlength="100">' +
           '<button class="comment-submit" id="comment-submit" aria-label="댓글 남기기">' +
             '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>' +
           '</button>' +
@@ -511,6 +511,19 @@
   var COMMENT_FN_URL = SUPABASE_URL + '/functions/v1/super-action';
   var myIdentity = null;
 
+  var COUNTRY_NAMES_KO = {
+    KR:'대한민국', US:'미국', JP:'일본', CN:'중국', TW:'대만', HK:'홍콩', SG:'싱가포르', TH:'태국',
+    VN:'베트남', PH:'필리핀', MY:'말레이시아', ID:'인도네시아', IN:'인도', GB:'영국', FR:'프랑스',
+    DE:'독일', ES:'스페인', IT:'이탈리아', NL:'네덜란드', BE:'벨기에', CH:'스위스', AT:'오스트리아',
+    SE:'스웨덴', NO:'노르웨이', DK:'덴마크', FI:'핀란드', PL:'폴란드', PT:'포르투갈', IE:'아일랜드',
+    RU:'러시아', UA:'우크라이나', TR:'튀르키예', GR:'그리스', CZ:'체코', RO:'루마니아', HU:'헝가리',
+    CA:'캐나다', MX:'멕시코', BR:'브라질', AR:'아르헨티나', CL:'칠레', CO:'콜롬비아', PE:'페루',
+    AU:'호주', NZ:'뉴질랜드', ZA:'남아프리카공화국', EG:'이집트', NG:'나이지리아', KE:'케냐',
+    SA:'사우디아라비아', AE:'아랍에미리트', IL:'이스라엘', IR:'이란', IQ:'이라크', PK:'파키스탄',
+    BD:'방글라데시', KZ:'카자흐스탄', MN:'몽골'
+  };
+  function countryNameKo(code){ return code ? (COUNTRY_NAMES_KO[code] || code) : '알 수 없음'; }
+
   function pick(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
   function rollIdentity(){
     var animals = Object.keys(COMMENT_ANIMALS);
@@ -604,6 +617,10 @@
         if(res.error){ msg.textContent = res.error; return; }
         msg.textContent = '';
         input.value = '';
+        if(res.data && res.data.nickname !== myIdentity.nickname){
+          myIdentity.nickname = res.data.nickname; // 중복이라 서버에서 번호가 붙었을 수 있음
+          paintIdentity();
+        }
         loadComments(post.id);
       }).catch(function(){ btn.disabled = false; msg.textContent = '올리기 실패, 다시 시도해주세요.'; });
     });
@@ -622,7 +639,7 @@
       }
       list.innerHTML = comments.map(function(c){
         var emoji = COMMENT_ANIMALS[animalOf(c.nickname)] || '🐾';
-        var ipLabel = (c.ip_prefix || '알 수 없음') + '.*.* · ' + (c.country || '?');
+        var ipLabel = (c.ip_prefix || '알 수 없음') + '.*.* · ' + countryNameKo(c.country);
         return '<li class="comment-row">' +
           commentAvatarHtml(c.nickname, emoji, ipLabel) +
           '<div class="comment-main">' +
