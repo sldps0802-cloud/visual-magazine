@@ -173,21 +173,33 @@
 
 <script src="vendor/marked.min.js"></script>
 <script src="vendor/purify.min.js"></script>
+<script src="vendor/supabase.min.js"></script>
+<script src="supabase-config.js"></script>
 <script>
   applyStoredTheme();
   function applyStoredTheme(){
     document.documentElement.dataset.theme = localStorage.getItem('theme') || 'dark';
   }
 
-  var id = new URLSearchParams(location.search).get('id') || localStorage.getItem('vc_current_post');
-  var posts = JSON.parse(localStorage.getItem('vc_posts') || '[]');
-  var post = posts.find(function(p){ return p.id === id; });
+  var id = new URLSearchParams(location.search).get('id');
   var main = document.getElementById('main');
 
-  if(!post){
+  if(!id){
     main.innerHTML = '<div class="not-found">글을 찾을 수 없어요. <a href="write.html">글쓰기로 돌아가기</a></div>';
   } else {
-    var date = new Date(post.createdAt).toLocaleDateString('ko-KR', { year:'numeric', month:'long', day:'numeric' });
+    main.innerHTML = '<div class="wc-loading">불러오는 중…</div>';
+    db.from('posts').select('*').eq('id', id).single().then(function(res){
+      if(res.error || !res.data){
+        main.innerHTML = '<div class="not-found">글을 찾을 수 없어요. <a href="write.html">글쓰기로 돌아가기</a></div>';
+        return;
+      }
+      renderPost(res.data);
+    });
+  }
+
+  function renderPost(post){
+    main.innerHTML = '';
+    var date = new Date(post.created_at).toLocaleDateString('ko-KR', { year:'numeric', month:'long', day:'numeric' });
     var titleEl = document.createElement('h1');
     titleEl.className = 'headline';
     titleEl.textContent = post.title;
@@ -411,52 +423,25 @@
       '<div class="wc-note">발행 시점에 가져온 결과예요. 시간이 지나면 자동으로 새로고침돼요.</div>';
   }
 
-  var WC_STALE_MS = 30 * 60 * 1000; // 30분 지나면 백그라운드에서 다시 확인
-
   function wireWorldCoverage(post, divideEl, skippedEl){
     var topic = post.title || '';
-    if((!divideEl && !skippedEl) || wcKeywords(topic).length === 0) return;
-    var divideContainer = divideEl ? divideEl.querySelector('.divide-detail') : null;
-    var skippedContainer = skippedEl ? skippedEl.querySelector('.skipped-detail') : null;
-
-    function persist(results){
-      post.wcResults = results;
-      post.wcFetchedAt = Date.now();
-      var posts = JSON.parse(localStorage.getItem('vc_posts') || '[]');
-      var idx = posts.findIndex(function(p){ return p.id === post.id; });
-      if(idx !== -1){ posts[idx] = post; localStorage.setItem('vc_posts', JSON.stringify(posts)); }
-    }
-    function renderFromCache(){
-      if(divideContainer) wcRenderDivide(divideContainer, post.wcResults);
-      if(skippedContainer) wcRenderSkipped(skippedContainer, post.wcResults);
-    }
-
-    var hasCache = !!(post.wcResults && post.wcResults.length);
-
-    if(hasCache){
-      renderFromCache();
-      if(!post.wcFetchedAt || (Date.now() - post.wcFetchedAt > WC_STALE_MS)){
-        wcFetchAll(topic).then(function(results){ persist(results); renderFromCache(); });
-      }
-    } else {
-      // 발행 시점에 못 가져온 예전 글: 처음 펼칠 때 한 번 가져와요
-      [divideEl, skippedEl].forEach(function(el){
-        if(!el) return;
-        el.addEventListener('toggle', function(){
-          if(!el.open || el.dataset.wcLoading) return;
-          el.dataset.wcLoading = '1';
-          var container = el.querySelector('.divide-detail') || el.querySelector('.skipped-detail');
-          container.innerHTML = '<div class="wc-loading">전 세계 언론을 확인하는 중… (0/' + (WC_REGIONS.length + 1) + ')</div>';
-          wcFetchAll(topic, function(done, total){
-            var loading = container.querySelector('.wc-loading');
-            if(loading) loading.textContent = '전 세계 언론을 확인하는 중… (' + done + '/' + total + ')';
-          }).then(function(results){
-            persist(results);
-            renderFromCache();
-          });
+    if(wcKeywords(topic).length === 0) return;
+    [divideEl, skippedEl].forEach(function(el){
+      if(!el) return;
+      var isDivide = el.classList.contains('divide');
+      el.addEventListener('toggle', function(){
+        if(!el.open || el.dataset.wcLoading) return;
+        el.dataset.wcLoading = '1';
+        var container = el.querySelector('.divide-detail') || el.querySelector('.skipped-detail');
+        container.innerHTML = '<div class="wc-loading">전 세계 언론을 확인하는 중… (0/' + (WC_REGIONS.length + 1) + ')</div>';
+        wcFetchAll(topic, function(done, total){
+          var loading = container.querySelector('.wc-loading');
+          if(loading) loading.textContent = '전 세계 언론을 확인하는 중… (' + done + '/' + total + ')';
+        }).then(function(results){
+          if(isDivide) wcRenderDivide(container, results); else wcRenderSkipped(container, results);
         });
       });
-    }
+    });
   }
 </script>
 </body>
