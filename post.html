@@ -292,6 +292,28 @@
   }
   @keyframes wc-confirm-shine{ to{transform:translateX(60%);} }
 
+  /* 라이트 모드에선 링을 빼고 카드는 회색~흰색 그라데이션, 버튼은 부드러운(radial) 저채도 그라데이션으로 */
+  :root[data-theme="light"] .wc-popup{
+    background:linear-gradient(160deg, #ffffff, #e4e4e7);
+  }
+  :root[data-theme="light"] .wc-popup-icon{
+    background:linear-gradient(160deg, #f4f4f5, #d9d9dd);
+  }
+  :root[data-theme="light"] .wc-popup-icon svg{color:#5a5a60;}
+  :root[data-theme="light"] .wc-popup-icon::before,
+  :root[data-theme="light"] .wc-popup-icon::after{
+    display:none;
+  }
+  :root[data-theme="light"] .wc-popup-confirm{
+    background:radial-gradient(130% 160% at 25% 15%, #f3f0ff, #e6ecff 45%, #eef6f5 100%);
+    border:1px solid rgba(0,0,0,.08);color:#3f3f46;
+    box-shadow:0 4px 14px rgba(0,0,0,.08), inset 0 1px 0 rgba(255,255,255,.7);
+  }
+  :root[data-theme="light"] .wc-popup-confirm:hover{
+    box-shadow:0 6px 18px rgba(0,0,0,.1), inset 0 1px 0 rgba(255,255,255,.8);
+  }
+  :root[data-theme="light"] .wc-popup-confirm::after{display:none;}
+
   /* claim-card: 어느 언론사가 뭘 다뤘는지 한눈에 보이도록 다룸/안다룸을 색이 아니라 별도 그룹+라벨로 분리 */
   .claim-card{padding:16px;margin-bottom:10px;border-radius:14px;border:1px solid var(--surface-border);background:var(--surface);box-shadow:inset 0 1px 0 rgba(255,255,255,.08);}
   .claim-card:last-of-type{margin-bottom:0;}
