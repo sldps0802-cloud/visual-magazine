@@ -35,7 +35,9 @@
   body{
     font-family:"Pretendard","Apple SD Gothic Neo",sans-serif;
     color:var(--text);
-    background:linear-gradient(180deg,var(--bg-top),var(--bg-mid) 45%,var(--bg-bottom) 100%);
+    background:
+      radial-gradient(ellipse 900px 550px at 50% 0%, color-mix(in srgb, var(--gold) 24%, transparent), transparent 70%),
+      linear-gradient(180deg,var(--bg-top),var(--bg-mid) 45%,var(--bg-bottom) 100%);
     background-attachment:fixed;
     transition:background .3s ease-out,color .3s ease-out;
   }
