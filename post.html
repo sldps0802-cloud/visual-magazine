@@ -152,8 +152,29 @@
     .feature-panel{width:62%;}
   }
   /* 새 매체가 발견돼도 예전 매체가 사라지지 않고 계속 쌓이니(백엔드가 누적 저장으로 바뀜), 고정 2열 대신
-     옆으로 스와이프해서 다 볼 수 있게 가로 스크롤 스트립으로 바꿈 */
-  .divide-grid{display:flex;gap:12px;overflow-x:auto;padding-bottom:6px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;}
+     캐러셀로: 스크롤바는 숨기고 양끝은 fade로 "더 있다"는 걸 알려주고, 클릭으로 넘기는 화살표도 둠 */
+  .divide-scroller{position:relative;}
+  .divide-grid{
+    display:flex;gap:12px;overflow-x:auto;overflow-y:hidden;padding:2px 4px 6px;
+    scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;
+    scrollbar-width:none;-ms-overflow-style:none;
+    mask-image:linear-gradient(90deg, transparent, #000 16px, #000 calc(100% - 16px), transparent);
+    -webkit-mask-image:linear-gradient(90deg, transparent, #000 16px, #000 calc(100% - 16px), transparent);
+  }
+  .divide-grid::-webkit-scrollbar{display:none;}
+  .divide-nav{
+    position:absolute;top:50%;margin-top:-16px;z-index:2;
+    width:32px;height:32px;border-radius:50%;flex:none;padding:0;
+    background:var(--surface);border:1px solid var(--surface-border);color:var(--text);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
+    box-shadow:0 4px 12px rgba(0,0,0,.2);backdrop-filter:blur(6px);
+    transition:opacity .25s ease-out,transform .25s cubic-bezier(.32,.72,0,1);
+  }
+  .divide-nav:hover{transform:scale(1.08);}
+  .divide-nav:active{transform:scale(.94);}
+  .divide-nav.prev{left:-6px;}
+  .divide-nav.next{right:-6px;}
+  .divide-nav:disabled{opacity:0;pointer-events:none;}
   .divide-card{
     flex:0 0 78%;scroll-snap-align:start;
     border:1px solid var(--surface-border);border-radius:14px;padding:16px;background:var(--surface);box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
@@ -770,18 +791,36 @@
       container.innerHTML = '<div class="wc-empty">아직 확인 중이거나, 이 주제와 일치하는 해외 보도를 찾지 못했어요.</div>';
       return;
     }
+    var arrowLeft = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>';
+    var arrowRight = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
     container.innerHTML =
-      '<div class="divide-grid">' +
-      results.map(function(r){
-        return '<div class="divide-card">' +
-          '<div class="source-row"><span class="source-badge">' + wcEscape(r.source.slice(0,1)) + '</span>' +
-          '<span>' + wcEscape(r.source) + '</span></div>' +
-          '<blockquote>' + wcEscape(r.item.title) + '</blockquote>' +
-          '<a class="source-link" href="' + r.item.link + '" target="_blank" rel="noopener">더 알아보기 →</a>' +
-        '</div>';
-      }).join('') +
+      '<div class="divide-scroller">' +
+        '<button type="button" class="divide-nav prev" aria-label="이전 보기">' + arrowLeft + '</button>' +
+        '<div class="divide-grid" id="wc-divide-grid">' +
+          results.map(function(r){
+            return '<div class="divide-card">' +
+              '<div class="source-row"><span class="source-badge">' + wcEscape(r.source.slice(0,1)) + '</span>' +
+              '<span>' + wcEscape(r.source) + '</span></div>' +
+              '<blockquote>' + wcEscape(r.item.title) + '</blockquote>' +
+              '<a class="source-link" href="' + r.item.link + '" target="_blank" rel="noopener">더 알아보기 →</a>' +
+            '</div>';
+          }).join('') +
+        '</div>' +
+        '<button type="button" class="divide-nav next" aria-label="다음 보기">' + arrowRight + '</button>' +
       '</div>' +
       '<div class="wc-note">주기적으로 갱신되는 결과예요.</div>';
+
+    var grid = container.querySelector('#wc-divide-grid');
+    var prevBtn = container.querySelector('.divide-nav.prev');
+    var nextBtn = container.querySelector('.divide-nav.next');
+    function updateDivideNav(){
+      prevBtn.disabled = grid.scrollLeft <= 4;
+      nextBtn.disabled = grid.scrollLeft >= grid.scrollWidth - grid.clientWidth - 4;
+    }
+    prevBtn.addEventListener('click', function(){ grid.scrollBy({ left: -grid.clientWidth * 0.9, behavior: 'smooth' }); });
+    nextBtn.addEventListener('click', function(){ grid.scrollBy({ left: grid.clientWidth * 0.9, behavior: 'smooth' }); });
+    grid.addEventListener('scroll', updateDivideNav);
+    updateDivideNav();
   }
   /* claims(각 매체가 뭘 강조했는지 비교)를 못 뽑았을 때의 단순 대체 화면 - 다룬 매체만 나열함 */
   function wcRenderPlainList(container, results){
