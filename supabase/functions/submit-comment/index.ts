@@ -345,20 +345,29 @@ async function refreshCoverageForPost(supabase, post) {
     return true;
   });
 
-  const rows = await Promise.all(deduped.map(async ({ item, market }) => {
+  // 새로고침마다 지우고 다시 쓰면, 검색 결과가 실행마다 달라질 수 있어서(구글 뉴스 검색은 매번 똑같지 않음)
+  // 이전에 찾아둔 매체가 그냥 사라져버림 - 기존 것은 남겨두고 이번에 새로 찾은 것만 더함
+  const { data: existingRows } = await supabase.from('world_coverage_cache').select('source,item_title').eq('post_id', post.id);
+  const dedupeKey = (source, title) => (source || '').toLowerCase() + '|' + (title || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const alreadyStored = new Set((existingRows || []).map((r) => dedupeKey(r.source, r.item_title)));
+
+  const newRows = [];
+  for (const { item, market } of deduped) {
     const cleanTitle = wcStripSourceSuffix(item.title, item.source);
+    const source = item.source || market.label;
+    if (alreadyStored.has(dedupeKey(source, cleanTitle))) continue;
     // 한국어 화면에 보여줄 거라 원문이 외국어면 한국어로 번역해서 저장 (원문은 링크로 확인 가능)
     const displayTitle = market.lang !== 'ko' ? await wcTranslate(cleanTitle, 'ko') : cleanTitle;
-    return {
-      post_id: post.id, region: market.label, source: item.source || market.label,
+    newRows.push({
+      post_id: post.id, region: market.label, source,
       matched: true, item_title: displayTitle || null, item_link: item.link || null,
       updated_at: new Date().toISOString(),
-    };
-  }));
+    });
+  }
 
-  await supabase.from('world_coverage_cache').delete().eq('post_id', post.id);
-  if (rows.length) await supabase.from('world_coverage_cache').insert(rows);
-  await refreshClaimsForPost(supabase, post, rows);
+  if (newRows.length) await supabase.from('world_coverage_cache').insert(newRows);
+  const { data: allRows } = await supabase.from('world_coverage_cache').select('source,item_title').eq('post_id', post.id);
+  await refreshClaimsForPost(supabase, post, allRows || []);
 }
 
 /* ---- claim-level "who skipped what": which outlets share the same specific angle,

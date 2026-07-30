@@ -151,8 +151,14 @@
     .feature-visual{width:38%;min-height:auto;}
     .feature-panel{width:62%;}
   }
-  .divide-grid{display:grid;grid-template-columns:1fr;gap:12px;}
-  .divide-card{border:1px solid var(--surface-border);border-radius:14px;padding:16px;background:var(--surface);box-shadow:inset 0 1px 0 rgba(255,255,255,.08);}
+  /* 새 매체가 발견돼도 예전 매체가 사라지지 않고 계속 쌓이니(백엔드가 누적 저장으로 바뀜), 고정 2열 대신
+     옆으로 스와이프해서 다 볼 수 있게 가로 스크롤 스트립으로 바꿈 */
+  .divide-grid{display:flex;gap:12px;overflow-x:auto;padding-bottom:6px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;}
+  .divide-card{
+    flex:0 0 78%;scroll-snap-align:start;
+    border:1px solid var(--surface-border);border-radius:14px;padding:16px;background:var(--surface);box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
+  }
+  @media (min-width:600px){ .divide-card{flex-basis:320px;} }
   /* '엇갈린 시선' 배너(진한 amber)보다는 차분하게, 그래도 카드마다 색이 다르게 - color-mix라 라이트/다크 모두 자동 대응.
      팝업의 신비한 홀로그램 톤(보라·파랑·핑크)과 한 팔레트로 통일 - 초록/주황처럼 동떨어진 색은 뺌 */
   .divide-card:nth-child(3n+1){
@@ -212,11 +218,9 @@
   .skipped-title{font-size:14px;font-weight:600;margin-bottom:8px;}
   .skipped-meta{font-size:12px;color:var(--text-muted);}
   .chevron{color:var(--text-muted);flex:none;margin-top:2px;}
-  @media (min-width:600px){ .divide-grid{grid-template-columns:1fr 1fr;} }
 
   /* ---- soft nudge from 엇갈린 시선 toward 놓친 이야기 ---- */
-  /* 배경은 라이트/다크 둘 다 자연스럽게 - 강제로 어둡게 고정했더니 화이트 모드에서 붕 뜨는 검은 박스처럼 보였음.
-     색은 아이콘·버튼의 링 하나에 집중시켜서, 어느 테마에서든 그 자체 glow로 도드라지게 함 */
+  /* 배경은 라이트/다크 둘 다 자연스럽게 - 강제로 어둡게 고정했더니 화이트 모드에서 붕 뜨는 검은 박스처럼 보였음 */
   .wc-popup{
     max-height:0;opacity:0;overflow:hidden;margin-top:0;
     background:var(--surface);
@@ -226,30 +230,7 @@
   }
   .wc-popup.show{max-height:240px;opacity:1;margin-top:12px;padding:16px 18px;border-radius:20px;}
   .wc-popup.show.expanded{max-height:2000px;border-radius:14px;}
-  /* 레퍼런스의 Dynamic Island 링 - conic-gradient를 두꺼운 원형 띠로 마스킹 + 블러 글로우로 확실히 도드라지게 */
-  .wc-popup-head{display:flex;align-items:center;gap:14px;}
-  .wc-popup-icon{
-    position:relative;width:44px;height:44px;border-radius:50%;flex:none;
-    display:flex;align-items:center;justify-content:center;
-    background:radial-gradient(120% 120% at 35% 30%, #2c2c30, #101012);
-  }
-  .wc-popup-icon svg{position:relative;z-index:1;color:#eceef2;width:18px;height:18px;}
-  .wc-popup-icon::before{
-    content:'';position:absolute;inset:-5px;border-radius:50%;
-    background:conic-gradient(from 190deg,
-      #0c0c0e 0deg, #16233c 30deg, #3d7bf5 60deg, #ffffff 85deg,
-      #ffe1a3 100deg, #ff8a52 118deg, #3a1f45 148deg,
-      #0c0c0e 185deg, #0c0c0e 330deg, #16233c 360deg);
-    -webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 5px));
-            mask:radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 5px));
-  }
-  .wc-popup-icon::after{
-    content:'';position:absolute;inset:-18px;border-radius:50%;z-index:-1;
-    background:radial-gradient(circle, rgba(255,225,160,.55), rgba(110,140,255,.32) 55%, transparent 78%);
-    filter:blur(10px);
-  }
-  .wc-popup-text{flex:1;font-size:14px;line-height:1.6;color:var(--text);}
-  .wc-popup-text strong{color:var(--amber);}
+  .wc-popup-text{font-size:14px;font-weight:600;line-height:1.6;color:var(--text);}
   .wc-popup-actions{display:flex;gap:8px;margin-top:10px;justify-content:flex-end;}
   .wc-popup-actions button{
     font-size:12px;padding:6px 14px;border-radius:999px;font-family:inherit;cursor:pointer;
@@ -258,32 +239,14 @@
   .wc-popup-actions button:hover{transform:translateY(-1px);}
   .wc-popup-actions button:active{transform:scale(.96);}
   .wc-popup-close{background:var(--surface);border:1px solid var(--surface-border);color:var(--text-muted);}
-  /* 확인하기 버튼: 좁은 필 모양이라 배너와 달리 꽉 채운 홀로그램을 써도 위계를 안 해침.
-     테두리엔 아이콘과 같은 conic 링을 둘러 거울처럼 반사되는 테를 만들고, 첫 등장 시 유리 위로 빛이 한 번 스윽 지나감 */
+  /* 확인하기 버튼: 좁은 필 모양이라 배너와 달리 꽉 채운 그라디언트를 써도 위계를 안 해침. 링은 없앰 - 그냥 부드러운 홀로그램 톤 + 은은한 glow */
   .wc-popup-confirm{
     position:relative;overflow:hidden;isolation:isolate;
-    background:
-      linear-gradient(100deg, #3a7bef 0%, #34c3e0 32%, #6f6ef0 62%, #c463e8 100%) padding-box,
-      conic-gradient(from 190deg,
-        #0c0c0e 0deg, #16233c 35deg, #3d7bf5 65deg, #ffffff 88deg,
-        #ffe1a3 102deg, #ff8a52 118deg, #3a1f45 150deg,
-        #0c0c0e 190deg, #0c0c0e 330deg, #16233c 360deg) border-box;
-    border:3px solid transparent;color:#fff;font-weight:700;
-    box-shadow:
-      0 0 0 1px rgba(255,255,255,.2),
-      0 0 16px -2px rgba(90,150,255,.75),
-      0 0 26px -4px rgba(255,150,90,.5),
-      0 0 38px -6px rgba(190,110,240,.45),
-      inset 0 1px 0 rgba(255,255,255,.45);
+    background:linear-gradient(100deg, #3a7bef 0%, #34c3e0 32%, #6f6ef0 62%, #c463e8 100%);
+    border:1px solid rgba(255,255,255,.35);color:#fff;font-weight:700;
+    box-shadow:0 0 18px -4px rgba(120,150,255,.55), inset 0 1px 0 rgba(255,255,255,.4);
   }
-  .wc-popup-confirm:hover{
-    box-shadow:
-      0 0 0 1px rgba(255,255,255,.25),
-      0 0 22px -2px rgba(90,150,255,.85),
-      0 0 34px -4px rgba(255,150,90,.6),
-      0 0 48px -6px rgba(190,110,240,.55),
-      inset 0 1px 0 rgba(255,255,255,.5);
-  }
+  .wc-popup-confirm:hover{box-shadow:0 0 24px -4px rgba(150,150,255,.65), inset 0 1px 0 rgba(255,255,255,.45);}
   .wc-popup-confirm::after{
     content:'';position:absolute;top:-60%;left:-60%;width:220%;height:220%;pointer-events:none;
     background:linear-gradient(115deg,transparent 42%,rgba(255,255,255,.85) 50%,transparent 58%);
@@ -295,14 +258,6 @@
   /* 라이트 모드에선 링을 빼고 카드는 회색~흰색 그라데이션, 버튼은 부드러운(radial) 저채도 그라데이션으로 */
   :root[data-theme="light"] .wc-popup{
     background:linear-gradient(160deg, #ffffff, #e4e4e7);
-  }
-  :root[data-theme="light"] .wc-popup-icon{
-    background:linear-gradient(160deg, #f4f4f5, #d9d9dd);
-  }
-  :root[data-theme="light"] .wc-popup-icon svg{color:#5a5a60;}
-  :root[data-theme="light"] .wc-popup-icon::before,
-  :root[data-theme="light"] .wc-popup-icon::after{
-    display:none;
   }
   :root[data-theme="light"] .wc-popup-confirm{
     background:radial-gradient(130% 160% at 25% 15%, #f3f0ff, #e6ecff 45%, #eef6f5 100%);
@@ -889,14 +844,10 @@
   function wcMaybeShowPopup(results, postId){
     // 1곳만 다뤘으면 비교할 다른 시선이 없는 거라 팝업 자체가 의미 없음
     if(results.length < 2) return;
-    var pick = results[0];
     var popup = document.getElementById('wc-popup');
     setTimeout(function(){
       popup.innerHTML =
-        '<div class="wc-popup-head">' +
-          '<div class="wc-popup-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/></svg></div>' +
-          '<div class="wc-popup-text"><strong>' + wcEscape(pick.source) + '</strong>은 <em>' + wcEscape(pick.item.title) + '</em>에 집중했어요</div>' +
-        '</div>' +
+        '<div class="wc-popup-text">더 궁금하실까봐 자세히 찾아봤어요</div>' +
         '<div class="wc-popup-actions">' +
           '<button class="wc-popup-close" id="wc-popup-close">닫기</button>' +
           '<button class="wc-popup-confirm" id="wc-popup-confirm">확인하기</button>' +
