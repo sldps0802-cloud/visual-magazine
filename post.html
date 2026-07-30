@@ -194,24 +194,18 @@
     background:linear-gradient(160deg, color-mix(in srgb, #ec4899 28%, var(--surface)), color-mix(in srgb, #ec4899 6%, var(--surface)));
     border-color:color-mix(in srgb, #ec4899 40%, var(--surface-border));
   }
-  /* claim-card: 안쪽은 어둡게 눌리고 가장자리는 선명하게 - 중앙 어두운 부분도 무채색 검정이 아니라
-     카드 색이 섞인 검정을 써서, 색이 다른 카드끼리 중앙만 보면 다 똑같아 보이지 않게 함 */
+  /* claim-card: 중앙에 어두운 blob을 두니 색을 맞춰도 결국 가운데로 시선이 쏠림 - 그 레이어 자체를 뺴고
+     divide-card처럼 그냥 대각선 그라디언트만 씀 (가장자리/중앙 차이로 시선을 끄는 대신 카드 전체가 고르게 보임) */
   .claim-card:nth-of-type(3n+1){
-    background:
-      radial-gradient(85% 75% at 50% 55%, color-mix(in srgb, #a855f7 45%, black), transparent 72%),
-      linear-gradient(160deg, color-mix(in srgb, #a855f7 55%, var(--surface)), color-mix(in srgb, #a855f7 16%, var(--surface)));
+    background:linear-gradient(160deg, color-mix(in srgb, #a855f7 40%, var(--surface)), color-mix(in srgb, #a855f7 10%, var(--surface)));
     border-color:color-mix(in srgb, #a855f7 45%, var(--surface-border));
   }
   .claim-card:nth-of-type(3n+2){
-    background:
-      radial-gradient(85% 75% at 50% 55%, color-mix(in srgb, #3b82f6 45%, black), transparent 72%),
-      linear-gradient(160deg, color-mix(in srgb, #3b82f6 55%, var(--surface)), color-mix(in srgb, #3b82f6 16%, var(--surface)));
+    background:linear-gradient(160deg, color-mix(in srgb, #3b82f6 40%, var(--surface)), color-mix(in srgb, #3b82f6 10%, var(--surface)));
     border-color:color-mix(in srgb, #3b82f6 45%, var(--surface-border));
   }
   .claim-card:nth-of-type(3n+3){
-    background:
-      radial-gradient(85% 75% at 50% 55%, color-mix(in srgb, #ec4899 45%, black), transparent 72%),
-      linear-gradient(160deg, color-mix(in srgb, #ec4899 55%, var(--surface)), color-mix(in srgb, #ec4899 16%, var(--surface)));
+    background:linear-gradient(160deg, color-mix(in srgb, #ec4899 40%, var(--surface)), color-mix(in srgb, #ec4899 10%, var(--surface)));
     border-color:color-mix(in srgb, #ec4899 45%, var(--surface-border));
   }
   .source-row{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700;margin-bottom:10px;}
