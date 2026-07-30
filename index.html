@@ -92,6 +92,7 @@
     display:grid;grid-template-columns:2fr 1fr;gap:28px;
     margin-bottom:64px;
   }
+  .feature-side-col{display:flex;flex-direction:column;gap:20px;}
   .thumb{
     display:block;border-radius:14px;aspect-ratio:16/9;
     background:linear-gradient(135deg,#c9822f,#7a3418 60%,#3a1408);
@@ -271,8 +272,6 @@
       <ol class="trending reveal" id="trending-list">
         <li class="empty-note">아직 조회 기록이 없어요.</li>
       </ol>
-
-      <div class="reveal" id="side-swap"></div>
     </div>
 
     <div>
@@ -409,21 +408,31 @@
     }).join('');
   }
 
-  renderSideSwap();
-
   function renderHero(posts){
     var grid = document.getElementById('hero-grid');
     if(posts.length === 0) return;
-    grid.innerHTML = posts.map(function(p, i){
-      var isMain = i === 0;
-      return '<a class="' + (isMain ? 'feature-main' : 'feature-side') + ' reveal" href="post.html?id=' + p.id + '">' +
+    var main = posts[0], side = posts[1];
+    var html = '<a class="feature-main reveal" href="post.html?id=' + main.id + '">' +
+      '<div class="thumb"></div>' +
+      '<div class="eyebrow">이 주의 콘텐츠</div>' +
+      '<h1>' + esc(main.title) + '</h1>' +
+      '<p class="excerpt">' + esc(excerptOf(main.body, 90)) + '</p>' +
+      '<span class="btn">이어서 보기</span>' +
+    '</a>';
+    // 오른쪽 칸: 최근 글 카드 + 퀴즈/비저너리 랜덤 자리를 세로로 묶는다 -- 카드가 왼쪽보다
+    // 짧아서 grid stretch로 생기던 빈 공간을 여기 채운다(전엔 그 빈 자리가 그냥 낭비였음).
+    html += '<div class="feature-side-col">';
+    if(side){
+      html += '<a class="feature-side reveal" href="post.html?id=' + side.id + '">' +
         '<div class="thumb"></div>' +
-        '<div class="eyebrow">' + (isMain ? '이 주의 콘텐츠' : '최근 글') + '</div>' +
-        '<' + (isMain ? 'h1' : 'h2') + '>' + esc(p.title) + '</' + (isMain ? 'h1' : 'h2') + '>' +
-        '<p class="excerpt">' + esc(excerptOf(p.body, isMain ? 90 : 60)) + '</p>' +
-        (isMain ? '<span class="btn">이어서 보기</span>' : '') +
+        '<div class="eyebrow">최근 글</div>' +
+        '<h2>' + esc(side.title) + '</h2>' +
+        '<p class="excerpt">' + esc(excerptOf(side.body, 60)) + '</p>' +
       '</a>';
-    }).join('');
+    }
+    html += '<div class="reveal" id="side-swap"></div></div>';
+    grid.innerHTML = html;
+    renderSideSwap();
   }
   function renderTrending(posts){
     var list = document.getElementById('trending-list');
