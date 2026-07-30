@@ -103,7 +103,7 @@
   }
   @keyframes word-reveal{
     0%{color:var(--text-muted);opacity:.5;}
-    55%{color:var(--amber);opacity:1;}
+    55%{color:color-mix(in srgb, var(--amber) 55%, white);opacity:1;}
     100%{color:var(--text);opacity:1;}
   }
 
@@ -229,7 +229,6 @@
     background:var(--surface);border:1px solid var(--surface-border);
     border-radius:14px;padding:16px;
   }
-  .wc-note{font-size:11px;color:var(--text-muted);opacity:.7;margin-top:10px;}
   .skipped-box{
     background:var(--surface);border:1px solid var(--surface-border);
     border-radius:16px;padding:20px;
@@ -542,6 +541,17 @@
     fast:    {step:6,  cap:150, dur:300, blockDur:200},
     instant: {step:0,  cap:0,   dur:150, blockDur:0}
   };
+  // normal→fast used to be a hard switch at exactly 1000ms, so the block revealed right after
+  // that instant snapped to a much shorter stagger - visibly "죽" the read. eases across a window
+  // instead so the acceleration itself is gradual, not a step function.
+  var SPEEDUP_START = 500, SPEEDUP_END = 1800;
+  function speedForElapsed(t){
+    var p = Math.max(0, Math.min(1, (t - SPEEDUP_START) / (SPEEDUP_END - SPEEDUP_START)));
+    var e = p * p * (3 - 2 * p); // smoothstep - no corner at either end
+    function lerp(a, b){ return a + (b - a) * e; }
+    var n = TIERS.normal, f = TIERS.fast;
+    return { step: lerp(n.step, f.step), cap: lerp(n.cap, f.cap), dur: lerp(n.dur, f.dur), blockDur: lerp(n.blockDur, f.blockDur) };
+  }
   function wireReadingReveal(){
     var blocks = Array.from(document.querySelectorAll('.reading'));
     var revealed = new Array(blocks.length).fill(false);
@@ -551,8 +561,6 @@
     var animatingUntil = 0;
     var i = 0;
 
-    function tierFor(t){ return t >= 1000 ? 'fast' : 'normal'; }
-
     function next(){
       if(stopped || i >= blocks.length) return;
       var idx = i++;
@@ -561,7 +569,7 @@
         entries.forEach(function(entry){
           if(!entry.isIntersecting) return;
           activeIO.unobserve(el);
-          setGradientSpeed(tierFor(Date.now() - startTime));
+          setGradientSpeed(speedForElapsed(Date.now() - startTime));
           revealed[idx] = true;
           el.classList.add('reveal-in');
           var dur = blockRevealDuration(el);
@@ -579,7 +587,7 @@
         if(Date.now() < animatingUntil){ massRevealWhenReady(); return; }
         stopped = true;
         if(activeIO) activeIO.disconnect();
-        setGradientSpeed('instant');
+        setGradientSpeed(TIERS.instant);
         blocks.forEach(function(el, idx){
           if(revealed[idx]) return;
           revealed[idx] = true;
@@ -589,17 +597,15 @@
     }
     setTimeout(massRevealWhenReady, 1700);
   }
-  var currentTier = 'normal';
-  function setGradientSpeed(tier){
-    if(currentTier === tier) return;
-    currentTier = tier;
-    var cfg = TIERS[tier];
+  var currentCfg = TIERS.normal;
+  function setGradientSpeed(cfg){
+    currentCfg = cfg;
     document.documentElement.style.setProperty('--word-step', cfg.step + 'ms');
     document.documentElement.style.setProperty('--word-cap', cfg.cap + 'ms');
     document.documentElement.style.setProperty('--word-dur', cfg.dur + 'ms');
   }
   function blockRevealDuration(el){
-    var cfg = TIERS[currentTier];
+    var cfg = currentCfg;
     if(!el.classList.contains('reading-lines')) return cfg.blockDur;
     var wordCount = el.querySelectorAll('.word').length;
     return Math.min((wordCount - 1) * cfg.step, cfg.cap) + cfg.dur + 100;
@@ -808,8 +814,7 @@
           }).join('') +
         '</div>' +
         '<button type="button" class="divide-nav next" aria-label="다음 보기">' + arrowRight + '</button>' +
-      '</div>' +
-      '<div class="wc-note">주기적으로 갱신되는 결과예요.</div>';
+      '</div>';
 
     var grid = container.querySelector('#wc-divide-grid');
     var prevBtn = container.querySelector('.divide-nav.prev');
@@ -839,8 +844,7 @@
           '</div></div></li>';
         }).join('') +
         '</ul>' +
-      '</div>' +
-      '<div class="wc-note">주기적으로 갱신되는 결과예요.</div>';
+      '</div>';
   }
 
   function wireWorldCoverage(post, divideEl){
@@ -875,8 +879,7 @@
           c.outlets_covered.map(function(o){ return '<span class="chip chip-on">' + wcEscape(o) + '</span>'; }).join('') +
         '</div></div>' : '') +
       '</div>';
-    }).join('') +
-    '<div class="wc-note">주기적으로 갱신되는 결과예요.</div>';
+    }).join('');
   }
   function wcMaybeShowPopup(results, postId){
     // 1곳만 다뤘으면 비교할 다른 시선이 없는 거라 팝업 자체가 의미 없음

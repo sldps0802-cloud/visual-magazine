@@ -3,15 +3,21 @@
 // 무료 공개 데이터셋으로 VPN 여부와 국가를 판별한 뒤 service_role 키로 DB에 씀
 // (comments 테이블은 anon/authenticated에 insert 정책이 없어서 여기서만 쓸 수 있음).
 //
-// 데이터 출처 (둘 다 무료, API 키/쿼터 없음, 콜드스타트마다 다시 받아서 메모리 캐시):
-//   VPN 대역:   https://github.com/X4BNet/lists_vpn (MIT)
-//   IP-국가 대역: https://github.com/sapics/ip-location-db (PDDL, public domain)
+// 데이터 출처 (다 무료, API 키/쿼터 없음, 콜드스타트마다 다시 받아서 메모리 캐시):
+//   VPN 대역(IPv4 전용):     https://github.com/X4BNet/lists_vpn (MIT)
+//   IP-국가 대역:            https://github.com/sapics/ip-location-db user-country (PDDL, public domain)
+//   서버/호스팅(데이터센터) 대역: https://github.com/sapics/ip-location-db server-country (PDDL) -
+//     X4BNet 리스트엔 IPv6가 아예 없어서(IPv6로 접속하면 VPN 체크가 통째로 빠짐) 이걸로 메꿈.
+//     "server-country"는 사람이 쓰는 회선(user-country)이 아니라 데이터센터/호스팅 IP만 모아둔
+//     대역이라, VPN·프록시 서비스 대부분이 여기 걸림 - IPv4/IPv6 둘 다 있어서 IPv6 구멍도 막힘.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const VPN_LIST_URL = 'https://raw.githubusercontent.com/X4BNet/lists_vpn/main/output/vpn/ipv4.txt';
 const COUNTRY_IPV4_URL = 'https://github.com/sapics/ip-location-db/releases/download/latest/user-country-ipv4.csv';
 const COUNTRY_IPV6_URL = 'https://github.com/sapics/ip-location-db/releases/download/latest/user-country-ipv6.csv';
+const SERVER_IPV4_URL = 'https://github.com/sapics/ip-location-db/releases/download/latest/server-country-ipv4.csv';
+const SERVER_IPV6_URL = 'https://github.com/sapics/ip-location-db/releases/download/latest/server-country-ipv6.csv';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -29,6 +35,8 @@ function ipv4ToInt(ip) {
 let vpnRanges = null; // sorted [startInt, endInt][]
 let countryRangesV4 = null; // sorted [startInt, endInt, code][]
 let countryRangesV6 = null; // sorted [startBig, endBig, code][] (BigInt)
+let serverRangesV4 = null; // sorted [startInt, endInt, code][] - datacenter/hosting IPv4 (VPN/proxy signal)
+let serverRangesV6 = null; // sorted [startBig, endBig, code][] (BigInt) - same, IPv6
 let loadingPromise = null;
 
 function parseCidrLine(line) {
@@ -40,21 +48,27 @@ function parseCidrLine(line) {
   return [start >>> 0, (start + size) >>> 0];
 }
 
+function parseIpv4RangeCsv(text) {
+  return text.split('\n').filter(Boolean).map((line) => {
+    const [start, end, code] = line.split(',');
+    const s = ipv4ToInt(start), e = ipv4ToInt(end);
+    return s === null ? null : [s, e, code];
+  }).filter(Boolean).sort((a, b) => a[0] - b[0]);
+}
+
 async function loadDatasets() {
-  if (vpnRanges && countryRangesV4) return;
+  if (vpnRanges && countryRangesV4 && serverRangesV4) return;
   if (loadingPromise) return loadingPromise;
   loadingPromise = (async () => {
-    const [vpnText, countryV4Text] = await Promise.all([
+    const [vpnText, countryV4Text, serverV4Text] = await Promise.all([
       fetch(VPN_LIST_URL).then((r) => r.text()),
       fetch(COUNTRY_IPV4_URL).then((r) => r.text()),
+      fetch(SERVER_IPV4_URL).then((r) => r.text()),
     ]);
     vpnRanges = vpnText.split('\n').map(parseCidrLine).filter(Boolean).sort((a, b) => a[0] - b[0]);
-    countryRangesV4 = countryV4Text.split('\n').filter(Boolean).map((line) => {
-      const [start, end, code] = line.split(',');
-      const s = ipv4ToInt(start), e = ipv4ToInt(end);
-      return s === null ? null : [s, e, code];
-    }).filter(Boolean).sort((a, b) => a[0] - b[0]);
-    // ipv6 country db is fetched lazily on first ipv6 request, not on every cold start
+    countryRangesV4 = parseIpv4RangeCsv(countryV4Text);
+    serverRangesV4 = parseIpv4RangeCsv(serverV4Text);
+    // ipv6 dbs are fetched lazily on first ipv6 request, not on every cold start
   })();
   await loadingPromise;
   loadingPromise = null;
@@ -72,24 +86,35 @@ function binarySearchRange(ranges, value) {
   return null;
 }
 
-async function lookupIpv6Country(ip) {
-  if (!countryRangesV6) {
-    const text = await fetch(COUNTRY_IPV6_URL).then((r) => r.text());
-    countryRangesV6 = text.split('\n').filter(Boolean).map((line) => {
-      const [start, end, code] = line.split(',');
-      try { return [ipv6ToBig(start), ipv6ToBig(end), code]; } catch { return null; }
-    }).filter(Boolean).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
-  }
+async function loadIpv6Ranges(url) {
+  const text = await fetch(url).then((r) => r.text());
+  return text.split('\n').filter(Boolean).map((line) => {
+    const [start, end, code] = line.split(',');
+    try { return [ipv6ToBig(start), ipv6ToBig(end), code]; } catch { return null; }
+  }).filter(Boolean).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+}
+
+function searchIpv6Ranges(ranges, ip) {
   const value = ipv6ToBig(ip);
-  let lo = 0, hi = countryRangesV6.length - 1;
+  let lo = 0, hi = ranges.length - 1;
   while (lo <= hi) {
     const mid = (lo + hi) >> 1;
-    const [start, end, code] = countryRangesV6[mid];
+    const [start, end, code] = ranges[mid];
     if (value < start) hi = mid - 1;
     else if (value > end) lo = mid + 1;
     else return code;
   }
   return null;
+}
+
+async function lookupIpv6Country(ip) {
+  if (!countryRangesV6) countryRangesV6 = await loadIpv6Ranges(COUNTRY_IPV6_URL);
+  return searchIpv6Ranges(countryRangesV6, ip);
+}
+
+async function lookupIpv6Server(ip) {
+  if (!serverRangesV6) serverRangesV6 = await loadIpv6Ranges(SERVER_IPV6_URL);
+  return searchIpv6Ranges(serverRangesV6, ip);
 }
 
 function ipv6ToBig(ip) {
@@ -122,15 +147,21 @@ function detectIp(req) {
 
 async function classifyIp(ip) {
   if (ip.includes(':')) {
-    const country = await lookupIpv6Country(ip).catch(() => null);
-    return { prefix: null, country, isVpn: false }; // no free IPv6 VPN dataset available
+    const [country, isServerHost] = await Promise.all([
+      lookupIpv6Country(ip).catch(() => null),
+      lookupIpv6Server(ip).catch(() => null),
+    ]);
+    // X4BNet의 VPN 리스트는 IPv4만 있어서, IPv6로 접속하면 예전엔 isVpn이 무조건 false였음(우회 가능했던 지점).
+    // server-country(데이터센터/호스팅 대역)는 IPv6도 있어서 이걸로 대신 판별함.
+    return { prefix: null, country, isVpn: !!isServerHost };
   }
   const value = ipv4ToInt(ip);
   if (value === null) return { prefix: null, country: null, isVpn: false };
-  const isVpn = !!binarySearchRange(vpnRanges, value);
+  const isKnownVpn = !!binarySearchRange(vpnRanges, value);
+  const isServerHost = !!binarySearchRange(serverRangesV4, value);
   const match = binarySearchRange(countryRangesV4, value);
   const parts = ip.split('.');
-  return { prefix: parts[0] + '.' + parts[1], country: match ? match[2] : null, isVpn };
+  return { prefix: parts[0] + '.' + parts[1], country: match ? match[2] : null, isVpn: isKnownVpn || isServerHost };
 }
 
 // '엇갈린 시선/놓친 이야기'가 쓰는 RSS 소스 도메인만 허용 (오픈 프록시로 악용되는 것 방지)
