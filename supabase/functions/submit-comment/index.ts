@@ -271,17 +271,18 @@ function wcStripSourceSuffix(title, source) {
   const suffix = ' - ' + source;
   return title.endsWith(suffix) ? title.slice(0, -suffix.length) : title;
 }
-/* ---- LLM 호출: Groq(무료 티어) 먼저 쓰고, 한도가 찼거나(429) 실패하면 Gemini(무료 티어)로 자동 전환.
-   둘 다 실패하면 null - 호출부가 각자 알아서 "판단 못 함"일 때의 기본값(보통 fail-open)으로 처리함. ---- */
-async function callGroq(prompt, opts) {
-  const key = Deno.env.get('GROQ_API_KEY');
+/* ---- LLM 호출: Groq(무료 티어, Llama 3.3) 먼저 쓰고, 한도가 찼거나(429) 실패하면
+   Cerebras(무료 티어, 같은 Llama 3.3 - Groq는 그냥 그 호스팅 업체 중 하나일 뿐이라 다른 곳에서도 돌릴 수 있음)로,
+   그것도 안 되면 Gemini(무료 티어, 다른 모델)로 넘어감. 셋 다 실패하면 null - 호출부가 알아서
+   "판단 못 함"일 때의 기본값(보통 fail-open)으로 처리함. ---- */
+async function callOpenAiChat(url, key, model, prompt, opts) {
   if (!key) return null;
   try {
-    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const r = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
+        model,
         messages: [{ role: 'user', content: prompt }],
         temperature: opts.temperature ?? 0,
         max_tokens: opts.maxTokens ?? 200,
@@ -294,6 +295,18 @@ async function callGroq(prompt, opts) {
   } catch {
     return null;
   }
+}
+async function callGroq(prompt, opts) {
+  return callOpenAiChat(
+    'https://api.groq.com/openai/v1/chat/completions',
+    Deno.env.get('GROQ_API_KEY'), 'llama-3.3-70b-versatile', prompt, opts,
+  );
+}
+async function callCerebras(prompt, opts) {
+  return callOpenAiChat(
+    'https://api.cerebras.ai/v1/chat/completions',
+    Deno.env.get('CEREBRAS_API_KEY'), 'llama-3.3-70b', prompt, opts,
+  );
 }
 async function callGemini(prompt, opts) {
   const key = Deno.env.get('GEMINI_API_KEY');
@@ -322,7 +335,7 @@ async function callGemini(prompt, opts) {
   }
 }
 async function callLLM(prompt, opts = {}) {
-  return (await callGroq(prompt, opts)) || (await callGemini(prompt, opts));
+  return (await callGroq(prompt, opts)) || (await callCerebras(prompt, opts)) || (await callGemini(prompt, opts));
 }
 
 async function verifySameTopic(topic, candidateTitle) {
@@ -520,10 +533,14 @@ Deno.serve(async (req) => {
         Deno.env.get('SUPABASE_URL'),
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
       );
-      const { data: posts, error: postsError } = await supabaseAdmin.from('posts').select('id,title');
+      const { data: posts, error: postsError } = await supabaseAdmin.from('posts').select('id,title,created_at');
       if (postsError) throw postsError;
+      const DAY_MS = 24 * 60 * 60 * 1000;
       for (const post of posts || []) {
-        await refreshCoverageForPost(supabaseAdmin, post);
+        // 게시 24시간 지난 글은 그 시점 이후로 새로 다룬 언론사가 더 나올 가능성이 낮아서 검색을 그만둠
+        // (LLM 호출도 아끼고, 오래된 글까지 매번 다시 검색하느라 갱신 주기가 늘어지는 것도 방지)
+        const ageMs = Date.now() - new Date(post.created_at).getTime();
+        if (ageMs <= DAY_MS) await refreshCoverageForPost(supabaseAdmin, post);
         await analyzeTextFlags(supabaseAdmin, post).catch(() => {});
       }
       return new Response(JSON.stringify({ ok: true, refreshed: (posts || []).length }), {
