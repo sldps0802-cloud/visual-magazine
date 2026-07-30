@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Magazine (scaffold)</title>
 <style>
+  @font-face{
+    font-family:'Pretendard';
+    src:url('vendor/fonts/Pretendard-SemiBold.woff2') format('woff2');
+    font-weight:600;
+    font-display:swap;
+  }
   :root{
     --gold:#ffcf8a;
     --amber:#e8823c;
@@ -251,7 +257,9 @@
 <nav>
   <a class="logo-lockup" href="index.html">
     <svg class="logo-mark" viewBox="0 0 100 34" width="50" height="17" aria-label="VC">
-      <text y="27" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="34" fill="var(--text)" textLength="66" lengthAdjust="spacingAndGlyphs"><tspan x="0">V</tspan><tspan x="34">C</tspan></text>
+      <g transform="scale(1.47,1)">
+        <text y="27" font-family="Pretendard, sans-serif" font-weight="600" font-size="34" letter-spacing="-0.015em" fill="var(--text)">VC</text>
+      </g>
     </svg>
   </a>
   <div class="navicons">
