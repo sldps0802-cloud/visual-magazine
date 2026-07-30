@@ -265,11 +265,36 @@ async function verifySameTopic(topic, candidateTitle) {
     return true; // Groq failure shouldn't break matching entirely - fail open to keyword result
   }
 }
-async function wcFetchMarket(topic, market, keywords) {
+async function wcExtractTopic(title) {
+  // 제목이 "13만명이 출근을 못해...2차대전 이후 최악"처럼 낚시성/수사적 표현이면 그걸 그대로
+  // 번역해서 검색해봤자 외국 매체 검색어로는 안 맞음 - 검색에 쓸 핵심 사건만 짧게 뽑아둠
+  const groqKey = Deno.env.get('GROQ_API_KEY');
+  if (!groqKey) return title;
+  try {
+    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + groqKey },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content:
+          '다음 기사 제목에서 낚시성 표현이나 수사적 질문은 빼고, 뉴스 검색에 바로 쓸 수 있는 핵심 사건만 ' +
+          '짧은 구절(5단어 이내)로 뽑으세요. 다른 설명 없이 검색어만 답하세요.\n\n제목: ' + title }],
+        temperature: 0,
+        max_tokens: 30,
+      }),
+    });
+    const data = await r.json();
+    const extracted = (data.choices?.[0]?.message?.content || '').trim().replace(/^["']|["']$/g, '');
+    return extracted || title;
+  } catch {
+    return title;
+  }
+}
+async function wcFetchMarket(searchQuery, verifyTitle, market, keywords) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 8000);
   try {
-    const r = await fetch(wcGoogleFeedUrl(topic, market), { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VisualMagazineBot/1.0)' } });
+    const r = await fetch(wcGoogleFeedUrl(searchQuery, market), { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VisualMagazineBot/1.0)' } });
     const text = await r.text();
     const items = wcParseXml(text);
     const minScore = 1; // any one distinctive keyword hit counts as coverage
@@ -283,7 +308,8 @@ async function wcFetchMarket(topic, market, keywords) {
     for (const c of candidates) {
       // keyword overlap alone can't tell "Michelle Steel" from "British Steel" - a name/word can
       // mean two unrelated things, so double check with the LLM before calling it a real match.
-      if (await verifySameTopic(topic, c.item.title)) verified.push(c.item);
+      // 원래 기사 제목(맥락이 더 풍부함)을 기준으로 같은 사건인지 판단함
+      if (await verifySameTopic(verifyTitle, c.item.title)) verified.push(c.item);
       if (verified.length >= 2) break; // 한 시장당 최대 2곳까지만, LLM 호출량을 적당히 묶어둠
     }
     return verified;
@@ -294,8 +320,9 @@ async function wcFetchMarket(topic, market, keywords) {
   }
 }
 async function refreshCoverageForPost(supabase, post) {
-  const topic = post.title || '';
-  if (wcTokenize(topic).length === 0) return;
+  const rawTitle = post.title || '';
+  if (wcTokenize(rawTitle).length === 0) return;
+  const topic = await wcExtractTopic(rawTitle);
   const langs = [...new Set(WC_MARKETS.map((m) => m.lang))];
   const keywordsByLang = {};
   for (const lang of langs) {
@@ -303,7 +330,7 @@ async function refreshCoverageForPost(supabase, post) {
     keywordsByLang[lang] = wcTokenize(translated);
   }
   const perMarket = await Promise.all(WC_MARKETS.map(async (market) => {
-    const items = await wcFetchMarket(topic, market, keywordsByLang[market.lang] || wcTokenize(topic));
+    const items = await wcFetchMarket(topic, rawTitle, market, keywordsByLang[market.lang] || wcTokenize(topic));
     return items.map((item) => ({ item, market }));
   }));
   const found = perMarket.flat();
