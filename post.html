@@ -196,33 +196,43 @@
   @media (min-width:600px){ .divide-grid{grid-template-columns:1fr 1fr;} }
 
   /* ---- soft nudge from 엇갈린 시선 toward 놓친 이야기 ---- */
-  /* Dynamic Island류 홀로글래스: 밝은 하이라이트 코어 + 컬러가 새어나오는 외부 glow. 배너보다 튀면 안 되니
-     전체를 다 채우기보다 좁은 스트릭 + 은은한 bloom으로 절제함 (항상 어둡게, 테마 무관) */
+  /* Dynamic Island류 다크 글래스 - 색은 아래 링 아이콘 하나에 집중시키고, 배경 자체는 절제된 무채색 유리로 둠
+     (레퍼런스도 알약 표면은 무채색이고, 색은 오직 링에서만 나옴) */
   .wc-popup{
     max-height:0;opacity:0;overflow:hidden;margin-top:0;
-    background:
-      linear-gradient(100deg,
-        transparent 3%,
-        rgba(255,255,255,.05) 13%,
-        rgba(120,180,255,.55) 23%,
-        rgba(255,255,255,.6) 29%,
-        rgba(180,120,255,.55) 37%,
-        rgba(255,140,210,.42) 47%,
-        rgba(255,190,140,.28) 57%,
-        transparent 72%
-      ),
-      linear-gradient(155deg, #232326, #101012);
-    border:1px solid rgba(255,255,255,.2);
+    background:linear-gradient(155deg, #26262a, #101012);
+    border:1px solid rgba(255,255,255,.16);
     box-shadow:
-      inset 0 1px 0 rgba(255,255,255,.25),
+      inset 0 1px 0 rgba(255,255,255,.2),
       inset 0 -16px 26px -18px rgba(0,0,0,.65),
-      0 0 34px -8px rgba(140,160,255,.5),
       0 10px 28px rgba(0,0,0,.35);
     transition:max-height .5s cubic-bezier(.32,.72,0,1),opacity .5s cubic-bezier(.32,.72,0,1),margin-top .5s cubic-bezier(.32,.72,0,1),border-radius .5s cubic-bezier(.32,.72,0,1);
   }
   .wc-popup.show{max-height:240px;opacity:1;margin-top:12px;padding:16px 18px;border-radius:20px;}
   .wc-popup.show.expanded{max-height:2000px;border-radius:14px;}
-  .wc-popup-text{font-size:14px;line-height:1.6;color:#f2f2f2;}
+  /* 레퍼런스의 Dynamic Island 링 - conic-gradient를 얇은 원형 띠로 마스킹해서 실제 '빛나는 링' 모양을 만듦 */
+  .wc-popup-head{display:flex;align-items:center;gap:14px;}
+  .wc-popup-icon{
+    position:relative;width:44px;height:44px;border-radius:50%;flex:none;
+    display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(120% 120% at 35% 30%, #2c2c30, #101012);
+  }
+  .wc-popup-icon svg{position:relative;z-index:1;color:#eceef2;width:18px;height:18px;}
+  .wc-popup-icon::before{
+    content:'';position:absolute;inset:-3px;border-radius:50%;
+    background:conic-gradient(from 190deg,
+      #0c0c0e 0deg, #16233c 35deg, #3d7bf5 65deg, #ffffff 88deg,
+      #ffe1a3 102deg, #ff8a52 118deg, #3a1f45 150deg,
+      #0c0c0e 190deg, #0c0c0e 330deg, #16233c 360deg);
+    -webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+            mask:radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+  }
+  .wc-popup-icon::after{
+    content:'';position:absolute;inset:-16px;border-radius:50%;z-index:-1;
+    background:radial-gradient(circle, rgba(255,225,160,.4), rgba(110,140,255,.22) 55%, transparent 75%);
+    filter:blur(8px);
+  }
+  .wc-popup-text{flex:1;font-size:14px;line-height:1.6;color:#f2f2f2;}
   .wc-popup-text strong{color:#ffcf8a;}
   .wc-popup-actions{display:flex;gap:8px;margin-top:10px;justify-content:flex-end;}
   .wc-popup-actions button{
@@ -819,7 +829,10 @@
     var popup = document.getElementById('wc-popup');
     setTimeout(function(){
       popup.innerHTML =
-        '<div class="wc-popup-text"><strong>' + wcEscape(pick.source) + '</strong>은 <em>' + wcEscape(pick.item.title) + '</em>에 집중했어요</div>' +
+        '<div class="wc-popup-head">' +
+          '<div class="wc-popup-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/></svg></div>' +
+          '<div class="wc-popup-text"><strong>' + wcEscape(pick.source) + '</strong>은 <em>' + wcEscape(pick.item.title) + '</em>에 집중했어요</div>' +
+        '</div>' +
         '<div class="wc-popup-actions">' +
           '<button class="wc-popup-close" id="wc-popup-close">닫기</button>' +
           '<button class="wc-popup-confirm" id="wc-popup-confirm">확인하기</button>' +
