@@ -194,23 +194,24 @@
     background:linear-gradient(160deg, color-mix(in srgb, #ec4899 28%, var(--surface)), color-mix(in srgb, #ec4899 6%, var(--surface)));
     border-color:color-mix(in srgb, #ec4899 40%, var(--surface-border));
   }
-  /* claim-card: 이전엔 중앙에 뚜렷한 어두운 원(경계가 있는 blob)이라 시선이 쏠렸음 - 아예 없애는 대신
-     경계를 아주 완만하게(중간 stop을 넣어 서서히 퍼지도록) 풀어서 "있는 듯 없는 듯"한 음영만 남김 */
+  /* claim-card: color-mix(...,black)는 불투명이라 그 위치를 아예 그 색으로 덮어버려서 - 크게 깔면 카드
+     전체가 검게 눌려버림(글자까지 안 보임). rgba 반투명 black을 얇게 얹는 걸로 바꿈 - 밑에 깔린 카드 고유
+     색이 그대로 비치면서 살짝만 그늘지니 자동으로 "그 색에 맞는 어두움"이 되고, 경계도 다단 stop으로 부드럽게 */
   .claim-card:nth-of-type(3n+1){
-    background:
-      radial-gradient(120% 100% at 50% 55%, color-mix(in srgb, #a855f7 26%, black) 0%, color-mix(in srgb, #a855f7 12%, black) 40%, transparent 88%),
+    background-image:
+      radial-gradient(65% 55% at 50% 60%, rgba(0,0,0,.3) 0%, rgba(0,0,0,.12) 45%, transparent 78%),
       linear-gradient(160deg, color-mix(in srgb, #a855f7 40%, var(--surface)), color-mix(in srgb, #a855f7 10%, var(--surface)));
     border-color:color-mix(in srgb, #a855f7 45%, var(--surface-border));
   }
   .claim-card:nth-of-type(3n+2){
-    background:
-      radial-gradient(120% 100% at 50% 55%, color-mix(in srgb, #3b82f6 26%, black) 0%, color-mix(in srgb, #3b82f6 12%, black) 40%, transparent 88%),
+    background-image:
+      radial-gradient(65% 55% at 50% 60%, rgba(0,0,0,.3) 0%, rgba(0,0,0,.12) 45%, transparent 78%),
       linear-gradient(160deg, color-mix(in srgb, #3b82f6 40%, var(--surface)), color-mix(in srgb, #3b82f6 10%, var(--surface)));
     border-color:color-mix(in srgb, #3b82f6 45%, var(--surface-border));
   }
   .claim-card:nth-of-type(3n+3){
-    background:
-      radial-gradient(120% 100% at 50% 55%, color-mix(in srgb, #ec4899 26%, black) 0%, color-mix(in srgb, #ec4899 12%, black) 40%, transparent 88%),
+    background-image:
+      radial-gradient(65% 55% at 50% 60%, rgba(0,0,0,.3) 0%, rgba(0,0,0,.12) 45%, transparent 78%),
       linear-gradient(160deg, color-mix(in srgb, #ec4899 40%, var(--surface)), color-mix(in srgb, #ec4899 10%, var(--surface)));
     border-color:color-mix(in srgb, #ec4899 45%, var(--surface-border));
   }
