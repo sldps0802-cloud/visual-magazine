@@ -3,7 +3,10 @@
 -- posts에 올려야 실제로 사이트에 뜬다(is_approved_editor()는 editor-approval-migration.sql
 -- 참고, 먼저 실행돼 있어야 함).
 
-create table ai_drafts (
+-- if not exists / drop-then-create policy: 이 파일을 두 번 실행해도(예: 처음엔
+-- is_approved_editor()가 아직 없어서 테이블만 만들어지고 정책에서 막혔던 경우) 안전하게
+-- 이어서 실행되게.
+create table if not exists ai_drafts (
   id bigint generated always as identity primary key,
   title text not null,
   body text not null,
@@ -15,10 +18,12 @@ create table ai_drafts (
 alter table ai_drafts enable row level security;
 
 -- 승인된 에디터만 초안을 보고(대기열), 상태를 바꿀 수 있다(발행함/무시함 표시).
+drop policy if exists "approved editors can view ai drafts" on ai_drafts;
 create policy "approved editors can view ai drafts"
   on ai_drafts for select
   using (is_approved_editor());
 
+drop policy if exists "approved editors can update ai drafts" on ai_drafts;
 create policy "approved editors can update ai drafts"
   on ai_drafts for update
   using (is_approved_editor());
