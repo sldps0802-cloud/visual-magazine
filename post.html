@@ -239,14 +239,14 @@
   .wc-popup-actions button:hover{transform:translateY(-1px);}
   .wc-popup-actions button:active{transform:scale(.96);}
   .wc-popup-close{background:var(--surface);border:1px solid var(--surface-border);color:var(--text-muted);}
-  /* 확인하기 버튼: 좁은 필 모양이라 배너와 달리 꽉 채운 그라디언트를 써도 위계를 안 해침. 링은 없앰 - 그냥 부드러운 홀로그램 톤 + 은은한 glow */
+  /* 확인하기 버튼: 링도, 딱딱한 일직선 그라디언트도 없이 - radial로 부드럽게, glow도 은은하게만 */
   .wc-popup-confirm{
     position:relative;overflow:hidden;isolation:isolate;
-    background:linear-gradient(100deg, #3a7bef 0%, #34c3e0 32%, #6f6ef0 62%, #c463e8 100%);
-    border:1px solid rgba(255,255,255,.35);color:#fff;font-weight:700;
-    box-shadow:0 0 18px -4px rgba(120,150,255,.55), inset 0 1px 0 rgba(255,255,255,.4);
+    background:radial-gradient(130% 160% at 25% 15%, #6f6ef0, #3a7bef 45%, #34c3e0 100%);
+    border:1px solid rgba(255,255,255,.3);color:#fff;font-weight:700;
+    box-shadow:0 4px 14px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.35);
   }
-  .wc-popup-confirm:hover{box-shadow:0 0 24px -4px rgba(150,150,255,.65), inset 0 1px 0 rgba(255,255,255,.45);}
+  .wc-popup-confirm:hover{box-shadow:0 6px 18px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.4);}
   .wc-popup-confirm::after{
     content:'';position:absolute;top:-60%;left:-60%;width:220%;height:220%;pointer-events:none;
     background:linear-gradient(115deg,transparent 42%,rgba(255,255,255,.85) 50%,transparent 58%);
@@ -847,7 +847,7 @@
     var popup = document.getElementById('wc-popup');
     setTimeout(function(){
       popup.innerHTML =
-        '<div class="wc-popup-text">더 궁금하실까봐 자세히 찾아봤어요</div>' +
+        '<div class="wc-popup-text">궁금해 하실 거 같아서 더 찾아봤어요</div>' +
         '<div class="wc-popup-actions">' +
           '<button class="wc-popup-close" id="wc-popup-close">닫기</button>' +
           '<button class="wc-popup-confirm" id="wc-popup-confirm">확인하기</button>' +
