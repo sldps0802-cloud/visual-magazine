@@ -181,9 +181,6 @@
   .skipped-list li:last-child .skipped-row{border-bottom:none;padding-bottom:0;}
   .skipped-list li:first-child .skipped-row{padding-top:0;}
   .skipped-title{font-size:14px;font-weight:600;margin-bottom:8px;}
-  .coverage-dots{display:flex;gap:4px;margin-bottom:8px;}
-  .dot{width:6px;height:6px;border-radius:50%;background:var(--surface-border);}
-  .dot.on{background:#2ecc71;}
   .skipped-meta{font-size:12px;color:var(--text-muted);}
   .chevron{color:var(--text-muted);flex:none;margin-top:2px;}
   @media (min-width:600px){ .divide-grid{grid-template-columns:1fr 1fr;} }
@@ -354,7 +351,7 @@
               '엇갈린 시선' +
             '</div>' +
             '<div class="feature-banner-title">전 세계 언론은 이 소식을 다르게 다룹니다</div>' +
-            '<div class="feature-banner-desc">8개 대륙 권역 + 한·미·일 대표 언론 + 구글 뉴스에서 같은 주제의 기사를 실시간으로 찾아 시각차를 비교해요.</div>' +
+            '<div class="feature-banner-desc">여러 언어권에서 같은 주제의 실제 기사를 찾아, 각 언론사가 무엇에 집중했는지 비교해요.</div>' +
             '<div class="feature-banner-meta">눌러서 비교해보기</div>' +
           '</div>' +
         '</summary>' +
@@ -687,9 +684,10 @@
   var wcCoverageCache = {};
   function wcLoadCoverage(postId){
     if(wcCoverageCache[postId]) return wcCoverageCache[postId];
+    // 이제 실제로 찾은 매체만 저장되니(매칭 안 된 자리는 더 안 만듦), 여기 있는 행은 전부 진짜 매칭임
     wcCoverageCache[postId] = db.from('world_coverage_cache').select('*').eq('post_id', postId).then(function(res){
-      return (res.data || []).map(function(r){
-        return { region:r.region, source:r.source, matched:r.matched, item: r.matched ? {title:r.item_title, link:r.item_link} : null };
+      return (res.data || []).filter(function(r){ return r.matched && r.item_title; }).map(function(r){
+        return { source:r.source, item:{title:r.item_title, link:r.item_link} };
       });
     });
     return wcCoverageCache[postId];
@@ -697,20 +695,15 @@
 
   function wcRenderDivide(container, results){
     if(results.length === 0){
-      container.innerHTML = '<div class="wc-empty">아직 확인 중이에요. 잠시 후 다시 열어보세요.</div>';
-      return;
-    }
-    var matched = results.filter(function(r){ return r.matched; });
-    if(matched.length === 0){
-      container.innerHTML = '<div class="wc-empty">지금은 이 주제와 일치하는 해외 보도를 찾지 못했어요.</div>';
+      container.innerHTML = '<div class="wc-empty">아직 확인 중이거나, 이 주제와 일치하는 해외 보도를 찾지 못했어요.</div>';
       return;
     }
     container.innerHTML =
       '<div class="divide-grid">' +
-      matched.map(function(r, i){
+      results.map(function(r, i){
         return '<div class="divide-card' + (i % 2 ? ' accent' : '') + '">' +
-          '<div class="source-row"><span class="source-badge">' + wcEscape(r.region.slice(0,1)) + '</span>' +
-          '<span>' + wcEscape(r.source) + ' <em>(' + wcEscape(r.region) + ')</em></span></div>' +
+          '<div class="source-row"><span class="source-badge">' + wcEscape(r.source.slice(0,1)) + '</span>' +
+          '<span>' + wcEscape(r.source) + '</span></div>' +
           '<blockquote>' + wcEscape(r.item.title) + '</blockquote>' +
           '<a class="source-link" href="' + r.item.link + '" target="_blank" rel="noopener">더 알아보기 →</a>' +
         '</div>';
@@ -718,27 +711,19 @@
       '</div>' +
       '<div class="wc-note">주기적으로 갱신되는 결과예요.</div>';
   }
-  function wcRenderSkipped(container, results){
+  /* claims(각 매체가 뭘 강조했는지 비교)를 못 뽑았을 때의 단순 대체 화면 - 다룬 매체만 나열함 */
+  function wcRenderPlainList(container, results){
     if(results.length === 0){
-      container.innerHTML = '<div class="wc-empty">아직 확인 중이에요. 잠시 후 다시 열어보세요.</div>';
+      container.innerHTML = '<div class="wc-empty">아직 확인 중이거나, 이 주제와 일치하는 해외 보도를 찾지 못했어요.</div>';
       return;
     }
-    var total = results.length;
-    var covered = results.filter(function(r){ return r.matched; });
-    var missed = results.filter(function(r){ return !r.matched; });
-    if(missed.length === 0){
-      container.innerHTML = '<div class="wc-empty">확인한 ' + total + '곳 모두 이 소식을 다뤘어요.</div>';
-      return;
-    }
-    var dots = results.map(function(r){ return '<span class="dot' + (r.matched ? ' on' : '') + '"></span>'; }).join('');
     container.innerHTML =
       '<div class="skipped-box">' +
-        '<div class="coverage-dots">' + dots + '</div>' +
-        '<div class="skipped-meta">' + total + '곳 중 ' + covered.length + '곳만 보도했어요</div>' +
+        '<div class="skipped-meta">' + results.length + '곳에서 이 소식을 다뤘어요</div>' +
         '<ul class="skipped-list">' +
-        missed.map(function(r){
+        results.map(function(r){
           return '<li><div class="skipped-row"><div>' +
-            '<div class="skipped-title">' + wcEscape(r.region) + '에서는 이 소식을 다루지 않았어요</div>' +
+            '<div class="skipped-title">' + wcEscape(r.source) + '</div>' +
           '</div></div></li>';
         }).join('') +
         '</ul>' +
@@ -766,7 +751,7 @@
   }
   function wcRenderClaims(container, claims, fallbackResults){
     if(claims.length === 0){
-      wcRenderSkipped(container, fallbackResults);
+      wcRenderPlainList(container, fallbackResults);
       return;
     }
     container.innerHTML = claims.map(function(c){
@@ -783,10 +768,9 @@
     '<div class="wc-note">주기적으로 갱신되는 결과예요.</div>';
   }
   function wcMaybeShowPopup(results, postId){
-    var matched = results.filter(function(r){ return r.matched; });
     // 1곳만 다뤘으면 비교할 다른 시선이 없는 거라 팝업 자체가 의미 없음
-    if(matched.length < 2) return;
-    var pick = matched[0];
+    if(results.length < 2) return;
+    var pick = results[0];
     var popup = document.getElementById('wc-popup');
     setTimeout(function(){
       popup.innerHTML =

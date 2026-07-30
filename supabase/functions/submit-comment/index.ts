@@ -153,21 +153,25 @@ function isAllowedRssUrl(urlStr) {
 import { XMLParser } from 'npm:fast-xml-parser@4';
 const xmlParser = new XMLParser({ ignoreAttributes: false });
 
-const WC_REGIONS = [
-  {name:'동아시아',   source:'South China Morning Post', feed:'https://www.scmp.com/rss/91/feed', lang:'en'},
-  {name:'중앙아시아', source:'Eurasianet',                feed:'https://eurasianet.org/rss', lang:'en'},
-  {name:'남아시아',   source:'The Hindu',                 feed:'https://www.thehindu.com/news/international/feeder/default.rss', lang:'en'},
-  {name:'동남아시아', source:'Bangkok Post',              feed:'https://www.bangkokpost.com/rss/data/topstories.xml', lang:'en'},
-  {name:'중동',       source:'Al Jazeera',                feed:'https://www.aljazeera.com/xml/rss/all.xml', lang:'en'},
-  {name:'아프리카',   source:'AllAfrica',                 feed:'https://allafrica.com/tools/headlines/rdf/latest/headlines.rdf', lang:'en'},
-  {name:'유럽',       source:'Euronews',                  feed:'https://www.euronews.com/rss?level=theme&name=news', lang:'en'},
-  {name:'아메리카',   source:'Global Voices',             feed:'https://globalvoices.org/-/world/americas/feed/', lang:'en'},
-  {name:'한국',       source:'연합뉴스',                  feed:'https://www.yna.co.kr/rss/news.xml', lang:'ko'},
-  {name:'미국',       source:'The New York Times',        feed:'https://rss.nytimes.com/services/xml/rss/nyt/World.xml', lang:'en'},
-  {name:'일본',       source:'NHK뉴스',                   feed:'https://www3.nhk.or.jp/rss/news/cat0.xml', lang:'ja'},
+// 예전엔 지역마다 언론사 1곳을 정해두고 그 RSS 최신 목록에 이 주제가 "있냐 없냐"만 봤는데,
+// 그건 그 언론사가 실제로 다뤘어도 오늘자 RSS에 없으면 그냥 "미보도"로 잘못 뜨는 문제가 있었음.
+// 그래서 지역별 고정 피드 대신, 여러 언어권에서 이 주제를 실제로 검색해 찾은 기사들을 모으는 방식으로 바꿈 -
+// "보도했나 안했나"가 아니라 "다룬 곳들이 각각 뭘 강조했나"를 보여주는 게 목적이라, 검색으로 실제
+// 기사를 찾아야 각 언론사의 진짜 관점(claims)을 비교할 재료가 생김.
+const WC_MARKETS = [
+  { label:'한국',      hl:'ko',    gl:'KR', ceid:'KR:ko',       lang:'ko' },
+  { label:'미국',      hl:'en-US', gl:'US', ceid:'US:en',       lang:'en' },
+  { label:'영국',      hl:'en-GB', gl:'GB', ceid:'GB:en',       lang:'en' },
+  { label:'일본',      hl:'ja',    gl:'JP', ceid:'JP:ja',       lang:'ja' },
+  { label:'중화권',    hl:'zh-TW', gl:'TW', ceid:'TW:zh-Hant',  lang:'zh' },
+  { label:'유럽(불어권)', hl:'fr', gl:'FR', ceid:'FR:fr',       lang:'fr' },
+  { label:'중남미',    hl:'es-419',gl:'MX', ceid:'MX:es-419',   lang:'es' },
+  { label:'중동',      hl:'ar',    gl:'EG', ceid:'EG:ar',       lang:'ar' },
+  { label:'인도',      hl:'hi',    gl:'IN', ceid:'IN:hi',       lang:'hi' },
 ];
-function wcGoogleFeedUrl(topic) {
-  return 'https://news.google.com/rss/search?q=' + encodeURIComponent(topic) + '&hl=en-US&gl=US&ceid=US:en';
+function wcGoogleFeedUrl(topic, market) {
+  return 'https://news.google.com/rss/search?q=' + encodeURIComponent(topic) +
+    '&hl=' + market.hl + '&gl=' + market.gl + '&ceid=' + market.ceid;
 }
 const WC_STOPWORDS = {
   the:1, a:1, an:1, of:1, to:1, in:1, on:1, for:1, and:1, or:1, is:1, are:1, was:1, were:1,
@@ -261,26 +265,30 @@ async function verifySameTopic(topic, candidateTitle) {
     return true; // Groq failure shouldn't break matching entirely - fail open to keyword result
   }
 }
-async function wcFetchRegion(feedUrl, keywords, topic) {
+async function wcFetchMarket(topic, market, keywords) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 8000);
   try {
-    const r = await fetch(feedUrl, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VisualMagazineBot/1.0)' } });
+    const r = await fetch(wcGoogleFeedUrl(topic, market), { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VisualMagazineBot/1.0)' } });
     const text = await r.text();
     const items = wcParseXml(text);
     const minScore = 1; // any one distinctive keyword hit counts as coverage
-    let best = null, bestScore = 0;
-    for (const item of items) {
-      const s = wcScore(item, keywords);
-      if (s > bestScore) { bestScore = s; best = item; }
+    // 한 시장에서 여러 언론사가 각자 다뤘을 수 있으니 1등만 뽑지 않고 점수순 상위 몇 개를 후보로 둠
+    const candidates = items
+      .map((it) => ({ item: it, score: wcScore(it, keywords) }))
+      .filter((c) => c.score >= minScore)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 4);
+    const verified = [];
+    for (const c of candidates) {
+      // keyword overlap alone can't tell "Michelle Steel" from "British Steel" - a name/word can
+      // mean two unrelated things, so double check with the LLM before calling it a real match.
+      if (await verifySameTopic(topic, c.item.title)) verified.push(c.item);
+      if (verified.length >= 2) break; // 한 시장당 최대 2곳까지만, LLM 호출량을 적당히 묶어둠
     }
-    let matched = bestScore >= minScore;
-    // keyword overlap alone can't tell "Michelle Steel" from "British Steel" - a name/word can
-    // mean two unrelated things, so double check with the LLM before calling it a real match.
-    if (matched && best) matched = await verifySameTopic(topic, best.title);
-    return { item: best, matched };
+    return verified;
   } catch {
-    return { item: null, matched: false };
+    return [];
   } finally {
     clearTimeout(timer);
   }
@@ -288,28 +296,42 @@ async function wcFetchRegion(feedUrl, keywords, topic) {
 async function refreshCoverageForPost(supabase, post) {
   const topic = post.title || '';
   if (wcTokenize(topic).length === 0) return;
-  const regions = WC_REGIONS.concat([{ name: '구글 뉴스', source: 'Google News', feed: wcGoogleFeedUrl(topic), lang: 'en' }]);
-  const langs = [...new Set(regions.map((r) => r.lang))];
+  const langs = [...new Set(WC_MARKETS.map((m) => m.lang))];
   const keywordsByLang = {};
   for (const lang of langs) {
     const translated = await wcTranslate(topic, lang);
     keywordsByLang[lang] = wcTokenize(translated);
   }
-  const results = await Promise.all(regions.map(async (region) => {
-    const { item, matched } = await wcFetchRegion(region.feed, keywordsByLang[region.lang] || wcTokenize(topic), topic);
-    // 구글 뉴스처럼 한 피드가 여러 언론사를 아우르는 경우, 뭉뚱그린 지역명 대신 기사 자체의 실제 언론사명을 씀
-    const resolvedSource = (item && item.source) || region.source;
-    const cleanTitle = item ? wcStripSourceSuffix(item.title, item.source) : null;
+  const perMarket = await Promise.all(WC_MARKETS.map(async (market) => {
+    const items = await wcFetchMarket(topic, market, keywordsByLang[market.lang] || wcTokenize(topic));
+    return items.map((item) => ({ item, market }));
+  }));
+  const found = perMarket.flat();
+
+  // 같은 기사가 여러 언어권 검색에 동시에 걸릴 수 있어서(예: 영국·미국 검색 둘 다 같은 로이터 기사),
+  // 언론사명+제목 기준으로 중복 제거
+  const seen = new Set();
+  const deduped = found.filter(({ item }) => {
+    const key = (item.source || '') + '|' + item.title.toLowerCase().replace(/\s+/g, ' ').trim();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const rows = await Promise.all(deduped.map(async ({ item, market }) => {
+    const cleanTitle = wcStripSourceSuffix(item.title, item.source);
     // 한국어 화면에 보여줄 거라 원문이 외국어면 한국어로 번역해서 저장 (원문은 링크로 확인 가능)
-    const displayTitle = cleanTitle && region.lang !== 'ko' ? await wcTranslate(cleanTitle, 'ko') : cleanTitle;
+    const displayTitle = market.lang !== 'ko' ? await wcTranslate(cleanTitle, 'ko') : cleanTitle;
     return {
-      post_id: post.id, region: region.name, source: resolvedSource,
-      matched, item_title: displayTitle || null, item_link: item?.link || null,
+      post_id: post.id, region: market.label, source: item.source || market.label,
+      matched: true, item_title: displayTitle || null, item_link: item.link || null,
       updated_at: new Date().toISOString(),
     };
   }));
-  await supabase.from('world_coverage_cache').upsert(results, { onConflict: 'post_id,region' });
-  await refreshClaimsForPost(supabase, post, results.filter((r) => r.matched));
+
+  await supabase.from('world_coverage_cache').delete().eq('post_id', post.id);
+  if (rows.length) await supabase.from('world_coverage_cache').insert(rows);
+  await refreshClaimsForPost(supabase, post, rows);
 }
 
 /* ---- claim-level "who skipped what": which outlets share the same specific angle,
