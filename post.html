@@ -215,21 +215,18 @@
   @media (min-width:600px){ .divide-grid{grid-template-columns:1fr 1fr;} }
 
   /* ---- soft nudge from 엇갈린 시선 toward 놓친 이야기 ---- */
-  /* Dynamic Island류 다크 글래스 - 색은 아래 링 아이콘 하나에 집중시키고, 배경 자체는 절제된 무채색 유리로 둠
-     (레퍼런스도 알약 표면은 무채색이고, 색은 오직 링에서만 나옴) */
+  /* 배경은 라이트/다크 둘 다 자연스럽게 - 강제로 어둡게 고정했더니 화이트 모드에서 붕 뜨는 검은 박스처럼 보였음.
+     색은 아이콘·버튼의 링 하나에 집중시켜서, 어느 테마에서든 그 자체 glow로 도드라지게 함 */
   .wc-popup{
     max-height:0;opacity:0;overflow:hidden;margin-top:0;
-    background:linear-gradient(155deg, #26262a, #101012);
-    border:1px solid rgba(255,255,255,.16);
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,.2),
-      inset 0 -16px 26px -18px rgba(0,0,0,.65),
-      0 10px 28px rgba(0,0,0,.35);
+    background:var(--surface);
+    border:1px solid var(--surface-border);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.1), 0 10px 24px rgba(0,0,0,.12);
     transition:max-height .5s cubic-bezier(.32,.72,0,1),opacity .5s cubic-bezier(.32,.72,0,1),margin-top .5s cubic-bezier(.32,.72,0,1),border-radius .5s cubic-bezier(.32,.72,0,1);
   }
   .wc-popup.show{max-height:240px;opacity:1;margin-top:12px;padding:16px 18px;border-radius:20px;}
   .wc-popup.show.expanded{max-height:2000px;border-radius:14px;}
-  /* 레퍼런스의 Dynamic Island 링 - conic-gradient를 얇은 원형 띠로 마스킹해서 실제 '빛나는 링' 모양을 만듦 */
+  /* 레퍼런스의 Dynamic Island 링 - conic-gradient를 두꺼운 원형 띠로 마스킹 + 블러 글로우로 확실히 도드라지게 */
   .wc-popup-head{display:flex;align-items:center;gap:14px;}
   .wc-popup-icon{
     position:relative;width:44px;height:44px;border-radius:50%;flex:none;
@@ -238,21 +235,21 @@
   }
   .wc-popup-icon svg{position:relative;z-index:1;color:#eceef2;width:18px;height:18px;}
   .wc-popup-icon::before{
-    content:'';position:absolute;inset:-3px;border-radius:50%;
+    content:'';position:absolute;inset:-5px;border-radius:50%;
     background:conic-gradient(from 190deg,
-      #0c0c0e 0deg, #16233c 35deg, #3d7bf5 65deg, #ffffff 88deg,
-      #ffe1a3 102deg, #ff8a52 118deg, #3a1f45 150deg,
-      #0c0c0e 190deg, #0c0c0e 330deg, #16233c 360deg);
-    -webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
-            mask:radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+      #0c0c0e 0deg, #16233c 30deg, #3d7bf5 60deg, #ffffff 85deg,
+      #ffe1a3 100deg, #ff8a52 118deg, #3a1f45 148deg,
+      #0c0c0e 185deg, #0c0c0e 330deg, #16233c 360deg);
+    -webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 5px));
+            mask:radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 5px));
   }
   .wc-popup-icon::after{
-    content:'';position:absolute;inset:-16px;border-radius:50%;z-index:-1;
-    background:radial-gradient(circle, rgba(255,225,160,.4), rgba(110,140,255,.22) 55%, transparent 75%);
-    filter:blur(8px);
+    content:'';position:absolute;inset:-18px;border-radius:50%;z-index:-1;
+    background:radial-gradient(circle, rgba(255,225,160,.55), rgba(110,140,255,.32) 55%, transparent 78%);
+    filter:blur(10px);
   }
-  .wc-popup-text{flex:1;font-size:14px;line-height:1.6;color:#f2f2f2;}
-  .wc-popup-text strong{color:#ffcf8a;}
+  .wc-popup-text{flex:1;font-size:14px;line-height:1.6;color:var(--text);}
+  .wc-popup-text strong{color:var(--amber);}
   .wc-popup-actions{display:flex;gap:8px;margin-top:10px;justify-content:flex-end;}
   .wc-popup-actions button{
     font-size:12px;padding:6px 14px;border-radius:999px;font-family:inherit;cursor:pointer;
@@ -260,7 +257,7 @@
   }
   .wc-popup-actions button:hover{transform:translateY(-1px);}
   .wc-popup-actions button:active{transform:scale(.96);}
-  .wc-popup-close{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.22);color:rgba(255,255,255,.75);}
+  .wc-popup-close{background:var(--surface);border:1px solid var(--surface-border);color:var(--text-muted);}
   /* 확인하기 버튼: 좁은 필 모양이라 배너와 달리 꽉 채운 홀로그램을 써도 위계를 안 해침.
      테두리엔 아이콘과 같은 conic 링을 둘러 거울처럼 반사되는 테를 만들고, 첫 등장 시 유리 위로 빛이 한 번 스윽 지나감 */
   .wc-popup-confirm{
@@ -271,10 +268,22 @@
         #0c0c0e 0deg, #16233c 35deg, #3d7bf5 65deg, #ffffff 88deg,
         #ffe1a3 102deg, #ff8a52 118deg, #3a1f45 150deg,
         #0c0c0e 190deg, #0c0c0e 330deg, #16233c 360deg) border-box;
-    border:1.5px solid transparent;color:#fff;font-weight:700;
-    box-shadow:0 0 18px -4px rgba(120,150,255,.6), inset 0 1px 0 rgba(255,255,255,.4);
+    border:3px solid transparent;color:#fff;font-weight:700;
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,.2),
+      0 0 16px -2px rgba(90,150,255,.75),
+      0 0 26px -4px rgba(255,150,90,.5),
+      0 0 38px -6px rgba(190,110,240,.45),
+      inset 0 1px 0 rgba(255,255,255,.45);
   }
-  .wc-popup-confirm:hover{box-shadow:0 0 26px -4px rgba(150,150,255,.75), inset 0 1px 0 rgba(255,255,255,.45);}
+  .wc-popup-confirm:hover{
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,.25),
+      0 0 22px -2px rgba(90,150,255,.85),
+      0 0 34px -4px rgba(255,150,90,.6),
+      0 0 48px -6px rgba(190,110,240,.55),
+      inset 0 1px 0 rgba(255,255,255,.5);
+  }
   .wc-popup-confirm::after{
     content:'';position:absolute;top:-60%;left:-60%;width:220%;height:220%;pointer-events:none;
     background:linear-gradient(115deg,transparent 42%,rgba(255,255,255,.85) 50%,transparent 58%);
