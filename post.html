@@ -154,18 +154,37 @@
   .divide-grid{display:grid;grid-template-columns:1fr;gap:12px;}
   .divide-card{border:1px solid var(--surface-border);border-radius:14px;padding:16px;background:var(--surface);box-shadow:inset 0 1px 0 rgba(255,255,255,.08);}
   /* '엇갈린 시선' 배너(진한 amber)보다는 차분하게, 그래도 카드마다 색이 다르게 - color-mix라 라이트/다크 모두 자동 대응.
-     팝업(아래 wc-popup)의 신비한 홀로그램 톤(보라·파랑·핑크)과 한 팔레트로 통일 - 초록/주황처럼 동떨어진 색은 뺌 */
-  .divide-card:nth-child(3n+1),.claim-card:nth-of-type(3n+1){
+     팝업의 신비한 홀로그램 톤(보라·파랑·핑크)과 한 팔레트로 통일 - 초록/주황처럼 동떨어진 색은 뺌 */
+  .divide-card:nth-child(3n+1){
     background:linear-gradient(160deg, color-mix(in srgb, #a855f7 28%, var(--surface)), color-mix(in srgb, #a855f7 6%, var(--surface)));
     border-color:color-mix(in srgb, #a855f7 40%, var(--surface-border));
   }
-  .divide-card:nth-child(3n+2),.claim-card:nth-of-type(3n+2){
+  .divide-card:nth-child(3n+2){
     background:linear-gradient(160deg, color-mix(in srgb, #3b82f6 28%, var(--surface)), color-mix(in srgb, #3b82f6 6%, var(--surface)));
     border-color:color-mix(in srgb, #3b82f6 40%, var(--surface-border));
   }
-  .divide-card:nth-child(3n+3),.claim-card:nth-of-type(3n+3){
+  .divide-card:nth-child(3n+3){
     background:linear-gradient(160deg, color-mix(in srgb, #ec4899 28%, var(--surface)), color-mix(in srgb, #ec4899 6%, var(--surface)));
     border-color:color-mix(in srgb, #ec4899 40%, var(--surface-border));
+  }
+  /* claim-card: 레퍼런스처럼 안쪽은 어둡게 눌리고 가장자리는 선명하게 - 진한 베이스 위에 중앙에만 어두운 radial을 얹음 */
+  .claim-card:nth-of-type(3n+1){
+    background:
+      radial-gradient(85% 75% at 50% 55%, rgba(0,0,0,.55), transparent 72%),
+      linear-gradient(160deg, color-mix(in srgb, #a855f7 55%, var(--surface)), color-mix(in srgb, #a855f7 16%, var(--surface)));
+    border-color:color-mix(in srgb, #a855f7 45%, var(--surface-border));
+  }
+  .claim-card:nth-of-type(3n+2){
+    background:
+      radial-gradient(85% 75% at 50% 55%, rgba(0,0,0,.55), transparent 72%),
+      linear-gradient(160deg, color-mix(in srgb, #3b82f6 55%, var(--surface)), color-mix(in srgb, #3b82f6 16%, var(--surface)));
+    border-color:color-mix(in srgb, #3b82f6 45%, var(--surface-border));
+  }
+  .claim-card:nth-of-type(3n+3){
+    background:
+      radial-gradient(85% 75% at 50% 55%, rgba(0,0,0,.55), transparent 72%),
+      linear-gradient(160deg, color-mix(in srgb, #ec4899 55%, var(--surface)), color-mix(in srgb, #ec4899 16%, var(--surface)));
+    border-color:color-mix(in srgb, #ec4899 45%, var(--surface-border));
   }
   .source-row{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700;margin-bottom:10px;}
   .source-row em{font-weight:400;font-style:normal;color:var(--text-muted);}
@@ -242,13 +261,27 @@
   .wc-popup-actions button:hover{transform:translateY(-1px);}
   .wc-popup-actions button:active{transform:scale(.96);}
   .wc-popup-close{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.22);color:rgba(255,255,255,.75);}
-  /* 확인하기 버튼: 좁은 필 모양이라 배너와 달리 꽉 채운 홀로그램 그라디언트를 써도 위계를 안 해침 */
+  /* 확인하기 버튼: 좁은 필 모양이라 배너와 달리 꽉 채운 홀로그램을 써도 위계를 안 해침.
+     테두리엔 아이콘과 같은 conic 링을 둘러 거울처럼 반사되는 테를 만들고, 첫 등장 시 유리 위로 빛이 한 번 스윽 지나감 */
   .wc-popup-confirm{
-    background:linear-gradient(100deg, #3a7bef 0%, #34c3e0 32%, #6f6ef0 62%, #c463e8 100%);
-    border:1px solid rgba(255,255,255,.35);color:#fff;font-weight:700;
-    box-shadow:0 0 18px -4px rgba(120,150,255,.6), inset 0 1px 0 rgba(255,255,255,.35);
+    position:relative;overflow:hidden;isolation:isolate;
+    background:
+      linear-gradient(100deg, #3a7bef 0%, #34c3e0 32%, #6f6ef0 62%, #c463e8 100%) padding-box,
+      conic-gradient(from 190deg,
+        #0c0c0e 0deg, #16233c 35deg, #3d7bf5 65deg, #ffffff 88deg,
+        #ffe1a3 102deg, #ff8a52 118deg, #3a1f45 150deg,
+        #0c0c0e 190deg, #0c0c0e 330deg, #16233c 360deg) border-box;
+    border:1.5px solid transparent;color:#fff;font-weight:700;
+    box-shadow:0 0 18px -4px rgba(120,150,255,.6), inset 0 1px 0 rgba(255,255,255,.4);
   }
-  .wc-popup-confirm:hover{box-shadow:0 0 26px -4px rgba(150,150,255,.75), inset 0 1px 0 rgba(255,255,255,.4);}
+  .wc-popup-confirm:hover{box-shadow:0 0 26px -4px rgba(150,150,255,.75), inset 0 1px 0 rgba(255,255,255,.45);}
+  .wc-popup-confirm::after{
+    content:'';position:absolute;top:-60%;left:-60%;width:220%;height:220%;pointer-events:none;
+    background:linear-gradient(115deg,transparent 42%,rgba(255,255,255,.85) 50%,transparent 58%);
+    transform:translateX(-60%);
+    animation:wc-confirm-shine 1.5s .5s ease-out both;
+  }
+  @keyframes wc-confirm-shine{ to{transform:translateX(60%);} }
 
   /* claim-card: 어느 언론사가 뭘 다뤘는지 한눈에 보이도록 다룸/안다룸을 색이 아니라 별도 그룹+라벨로 분리 */
   .claim-card{padding:16px;margin-bottom:10px;border-radius:14px;border:1px solid var(--surface-border);background:var(--surface);box-shadow:inset 0 1px 0 rgba(255,255,255,.08);}
