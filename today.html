@@ -244,8 +244,15 @@
 
   var TODAY_FN_URL = SUPABASE_URL + '/functions/v1/super-action';
 
+  // 서버(Edge Function)와 같은 이유로 KST 달력 날짜를 써야 한다 -- UTC로 하면 한국 새벽
+  // 0~9시엔 클라이언트가 "어제"로 착각해서, 이미 오늘 투표했는데도 다시 투표 가능한 것처럼
+  // 보이거나 반대로 아직 어제인데 오늘 걸로 잠기는 하루 어긋남이 생긴다.
+  function kstDateStr(){
+    return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  }
+
   /* ---- 투표 ---- */
-  var votedKey = 'today_voted_' + new Date().toISOString().slice(0, 10);
+  var votedKey = 'today_voted_' + kstDateStr();
 
   function loadStatus(){
     fetch(TODAY_FN_URL, {
@@ -265,8 +272,8 @@
     var upPct = total ? Math.round(up / total * 100) : 50;
     document.getElementById('vote-bar-up').style.width = upPct + '%';
     document.getElementById('vote-bar-down').style.width = (100 - upPct) + '%';
-    document.getElementById('vote-count-up').textContent = '간다 ' + up + '표';
-    document.getElementById('vote-count-down').textContent = '빠진다 ' + down + '표';
+    document.getElementById('vote-count-up').textContent = '간다 ' + upPct + '%';
+    document.getElementById('vote-count-down').textContent = '빠진다 ' + (100 - upPct) + '%';
   }
 
   function renderCamps(up, down){
@@ -392,7 +399,7 @@
   });
 
   function loadComments(){
-    var today = new Date().toISOString().slice(0, 10);
+    var today = kstDateStr();
     db.from('today_comments').select('*').eq('vote_date', today).order('created_at', {ascending:false}).then(function(res){
       var list = document.getElementById('comment-list');
       var comments = res.data || [];

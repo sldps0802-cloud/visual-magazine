@@ -209,6 +209,15 @@ function computeVisionaryRanking(calls) {
   return { rows, baseline };
 }
 
+/* ---- 오늘의 예측 관련 "오늘" 날짜는 전부 KST(UTC+9, DST 없음) 기준이어야 한다. 서버(Deno)는
+   UTC로 돈다 -- new Date().toISOString()을 그대로 쓰면 한국 새벽 0~9시 사이엔 어제 UTC 날짜로
+   찍혀서, 사용자에게는 이미 "오늘"인데 투표·댓글이 어제 날짜에 묶이는 버그가 생긴다
+   (실측: UTC 20:55 = KST 05:55인데 UTC 기준으로는 여전히 전날). 9시간을 더한 뒤 UTC 날짜만
+   잘라내는 방식으로 KST 달력 날짜를 얻는다. ---- */
+function kstDateStr(msOffset = 0) {
+  return new Date(Date.now() + msOffset + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
 /* ---- 오늘의 예측: 유튜버 "최근 콜"을 오늘의 간다/빠진다 진영으로 묶을 때, 지평이 다른
    콜(예: "하반기 전망")이나 며칠 지난 낡은 콜까지 오늘 진영으로 잘못 대표시키지 않도록
    두 조건을 다 거른다 -- 짧은(+1거래일) 지평이면서 최근 3일 이내인 콜만 인정한다. ---- */
@@ -642,8 +651,8 @@ Deno.serve(async (req) => {
         Deno.env.get('SUPABASE_URL'),
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
       );
-      const today = new Date().toISOString().slice(0, 10);
-      const recentCutoff = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const today = kstDateStr();
+      const recentCutoff = kstDateStr(-5 * 24 * 60 * 60 * 1000);
       const [votesRes, myVoteRes, callsRes] = await Promise.all([
         supabaseAdmin.from('daily_votes').select('direction').eq('vote_date', today),
         supabaseAdmin.from('daily_votes').select('direction').eq('vote_date', today).eq('ip', ip).maybeSingle(),
@@ -777,7 +786,7 @@ Deno.serve(async (req) => {
     if (body.action === 'today-vote') {
       const direction = body.direction === 'up' || body.direction === 'down' ? body.direction : null;
       if (!direction) throw new Error('direction이 필요해요.');
-      const today = new Date().toISOString().slice(0, 10);
+      const today = kstDateStr();
       const { error } = await supabase.from('daily_votes').insert({ vote_date: today, ip, direction });
       if (error) {
         if (error.code === '23505') { // unique_violation: (vote_date, ip) 중복 -- 하루 1표
@@ -812,7 +821,7 @@ Deno.serve(async (req) => {
       }
       await supabase.from('comment_rate_limit').upsert({ ip, last_at: new Date().toISOString() });
 
-      const today = new Date().toISOString().slice(0, 10);
+      const today = kstDateStr();
       const { data: existingRows } = await supabase.from('today_comments').select('nickname').eq('vote_date', today);
       const existingNames = new Set((existingRows || []).map((r) => r.nickname));
       let finalNickname = nickname;
