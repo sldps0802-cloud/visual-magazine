@@ -300,8 +300,7 @@
   .claim-group-label{font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:.03em;display:block;margin-bottom:6px;}
   .claim-chips{display:flex;flex-wrap:wrap;gap:6px;}
   .chip{font-size:12px;padding:4px 12px;border-radius:999px;border:1px solid transparent;font-weight:600;}
-  .chip-on{background:color-mix(in srgb, #2ecc71 20%, transparent);color:#2ecc71;border-color:color-mix(in srgb, #2ecc71 42%, transparent);}
-  .chip-off{background:color-mix(in srgb, var(--text-muted) 12%, transparent);color:var(--text-muted);border-color:color-mix(in srgb, var(--text-muted) 30%, transparent);}
+  .chip-on{background:color-mix(in srgb, var(--text-muted) 12%, transparent);color:var(--text-muted);border-color:color-mix(in srgb, var(--text-muted) 30%, transparent);}
 
   /* ---- engagement bar + comments ---- */
   .engage-bar{
@@ -870,11 +869,8 @@
       return '<div class="claim-card">' +
         '<div class="claim-text">' + wcEscape(c.claim) + '</div>' +
         '<div class="claim-meta">' + total + '곳 중 ' + c.outlets_covered.length + '곳에서 다룸</div>' +
-        (c.outlets_covered.length ? '<div class="claim-group"><span class="claim-group-label">다룬 곳</span><div class="claim-chips">' +
+        (c.outlets_covered.length ? '<div class="claim-group"><div class="claim-chips">' +
           c.outlets_covered.map(function(o){ return '<span class="chip chip-on">' + wcEscape(o) + '</span>'; }).join('') +
-        '</div></div>' : '') +
-        (c.outlets_missed.length ? '<div class="claim-group"><span class="claim-group-label">다루지 않음</span><div class="claim-chips">' +
-          c.outlets_missed.map(function(o){ return '<span class="chip chip-off">' + wcEscape(o) + '</span>'; }).join('') +
         '</div></div>' : '') +
       '</div>';
     }).join('') +
