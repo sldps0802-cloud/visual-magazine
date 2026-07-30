@@ -784,7 +784,8 @@
   }
   function wcMaybeShowPopup(results, postId){
     var matched = results.filter(function(r){ return r.matched; });
-    if(matched.length === 0) return;
+    // 1곳만 다뤘으면 비교할 다른 시선이 없는 거라 팝업 자체가 의미 없음
+    if(matched.length < 2) return;
     var pick = matched[0];
     var popup = document.getElementById('wc-popup');
     setTimeout(function(){

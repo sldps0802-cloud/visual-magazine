@@ -223,10 +223,18 @@ function wcParseXml(xmlText) {
       title: String(it.title ?? '').trim(),
       link: typeof it.link === 'string' ? it.link : (it.link?.['@_href'] || ''),
       description: String(it.description ?? it.summary ?? '').trim(),
+      // 구글 뉴스처럼 여러 언론사를 한 피드로 묶어 보여주는 소스는 <source> 태그에 실제 언론사명이 들어있음
+      source: typeof it.source === 'string' ? it.source : (it.source?.['#text'] || ''),
     }));
   } catch {
     return [];
   }
+}
+function wcStripSourceSuffix(title, source) {
+  // 구글 뉴스 제목은 관례적으로 끝에 " - 언론사명"이 붙는데, source를 따로 보여줄 거라 중복이라 제거
+  if (!source) return title;
+  const suffix = ' - ' + source;
+  return title.endsWith(suffix) ? title.slice(0, -suffix.length) : title;
 }
 async function verifySameTopic(topic, candidateTitle) {
   const groqKey = Deno.env.get('GROQ_API_KEY');
@@ -289,10 +297,13 @@ async function refreshCoverageForPost(supabase, post) {
   }
   const results = await Promise.all(regions.map(async (region) => {
     const { item, matched } = await wcFetchRegion(region.feed, keywordsByLang[region.lang] || wcTokenize(topic), topic);
+    // 구글 뉴스처럼 한 피드가 여러 언론사를 아우르는 경우, 뭉뚱그린 지역명 대신 기사 자체의 실제 언론사명을 씀
+    const resolvedSource = (item && item.source) || region.source;
+    const cleanTitle = item ? wcStripSourceSuffix(item.title, item.source) : null;
     // 한국어 화면에 보여줄 거라 원문이 외국어면 한국어로 번역해서 저장 (원문은 링크로 확인 가능)
-    const displayTitle = item && region.lang !== 'ko' ? await wcTranslate(item.title, 'ko') : item?.title;
+    const displayTitle = cleanTitle && region.lang !== 'ko' ? await wcTranslate(cleanTitle, 'ko') : cleanTitle;
     return {
-      post_id: post.id, region: region.name, source: region.source,
+      post_id: post.id, region: region.name, source: resolvedSource,
       matched, item_title: displayTitle || null, item_link: item?.link || null,
       updated_at: new Date().toISOString(),
     };
