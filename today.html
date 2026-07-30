@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>오늘의 예측 · 비주얼매거진</title>
+<style>
+  @font-face{
+    font-family:'Pretendard';
+    src:url('vendor/fonts/Pretendard-SemiBold.woff2') format('woff2');
+    font-weight:600;
+    font-display:swap;
+  }
+  :root{
+    --gold:#ffcf8a;
+    --amber:#e8823c;
+    --bg-top:#0d0d0d;
+    --bg-mid:#1a1a1a;
+    --bg-bottom:#262626;
+    --text:#f2f2f2;
+    --text-muted:rgba(242,242,242,.6);
+    --surface:rgba(255,255,255,.06);
+    --surface-border:rgba(255,255,255,.14);
+    --up:#e05a4e;
+    --down:#3b7dde;
+  }
+  :root[data-theme="light"]{
+    --gold:#c97a2e;
+    --amber:#b8571f;
+    --bg-top:#ffffff;
+    --bg-mid:#fafafa;
+    --bg-bottom:#ededed;
+    --text:#111111;
+    --text-muted:rgba(17,17,17,.6);
+    --surface:rgba(0,0,0,.05);
+    --surface-border:rgba(0,0,0,.12);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    font-family:"Pretendard","Apple SD Gothic Neo",sans-serif;
+    color:var(--text);
+    background:
+      radial-gradient(ellipse 900px 550px at 50% 0%, color-mix(in srgb, var(--gold) 24%, transparent), transparent 70%),
+      linear-gradient(180deg,var(--bg-top),var(--bg-mid) 45%,var(--bg-bottom) 100%);
+    background-attachment:fixed;
+    min-height:100vh;
+  }
+  a{color:inherit;text-decoration:none;}
+  svg{display:block;}
+  .wrap{max-width:680px;margin:0 auto;padding:0 24px;}
+
+  nav{
+    position:sticky;top:0;z-index:10;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:16px 24px;
+    background:rgba(10,10,10,.4);backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--surface-border);
+  }
+  .logo-lockup{display:flex;align-items:center;gap:8px;}
+  .navicons{display:flex;gap:10px;}
+  .round{
+    width:36px;height:36px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
+    background:var(--surface);border:1px solid var(--surface-border);color:var(--text);
+  }
+
+  main{padding:40px 0 100px;}
+  .page-title{font-size:26px;font-weight:800;margin-bottom:6px;}
+  .page-sub{font-size:13px;color:var(--text-muted);margin-bottom:32px;line-height:1.6;}
+
+  .vote-card{
+    background:var(--surface);border:1px solid var(--surface-border);border-radius:18px;
+    padding:24px;margin-bottom:32px;text-align:center;
+  }
+  .vote-label{font-size:12px;color:var(--text-muted);margin-bottom:6px;}
+  .vote-question{font-size:18px;font-weight:800;margin-bottom:20px;}
+  .vote-buttons{display:flex;gap:12px;margin-bottom:16px;}
+  .vote-btn{
+    flex:1;padding:16px;border-radius:14px;font-family:inherit;font-size:15px;font-weight:800;cursor:pointer;
+    background:var(--surface);border:1px solid var(--surface-border);color:var(--text);
+    transition:transform .12s ease-out;
+  }
+  .vote-btn:active{transform:scale(.97);}
+  .vote-btn.up.picked{background:color-mix(in srgb, var(--up) 22%, transparent);border-color:var(--up);color:var(--up);}
+  .vote-btn.down.picked{background:color-mix(in srgb, var(--down) 22%, transparent);border-color:var(--down);color:var(--down);}
+  .vote-btn:disabled{cursor:default;opacity:.55;}
+  .vote-btn:disabled:not(.picked){opacity:.35;}
+  .vote-bar{
+    display:flex;height:10px;border-radius:999px;overflow:hidden;background:var(--surface-border);margin-bottom:8px;
+  }
+  .vote-bar-up{background:var(--up);}
+  .vote-bar-down{background:var(--down);}
+  .vote-counts{display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);}
+  .vote-msg{font-size:12px;color:var(--amber);margin-top:10px;min-height:14px;}
+
+  .panel-title{font-size:17px;font-weight:800;margin-bottom:4px;}
+  .panel-sub{font-size:13px;color:var(--text-muted);margin-bottom:16px;}
+
+  .camps{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:32px;}
+  .camp-col{background:var(--surface);border:1px solid var(--surface-border);border-radius:14px;padding:16px;}
+  .camp-col.up{border-color:color-mix(in srgb, var(--up) 35%, var(--surface-border));}
+  .camp-col.down{border-color:color-mix(in srgb, var(--down) 35%, var(--surface-border));}
+  .camp-head{font-size:13px;font-weight:800;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+  .camp-col.up .camp-head{color:var(--up);}
+  .camp-col.down .camp-head{color:var(--down);}
+  .camp-list{list-style:none;font-size:13px;line-height:2;}
+  .camp-empty{font-size:12px;color:var(--text-muted);}
+  .camp-note{font-size:11px;color:var(--text-muted);line-height:1.6;margin-bottom:32px;}
+
+  /* ---- comment thread (post.html과 동일한 스타일) ---- */
+  .comment-form{margin-bottom:20px;}
+  .comment-identity{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+  .comment-avatar{
+    width:36px;height:36px;border-radius:50%;flex:none;position:relative;
+    display:flex;align-items:center;justify-content:center;font-size:17px;cursor:pointer;
+  }
+  .comment-nickname{font-weight:700;font-size:14px;}
+  .reroll-btn{
+    font-size:12px;padding:4px 10px;border-radius:999px;font-family:inherit;cursor:pointer;
+    background:var(--surface);border:1px solid var(--surface-border);color:var(--text);
+  }
+  .comment-input-row{
+    display:flex;align-items:center;gap:6px;
+    background:var(--surface);border:1px solid var(--surface-border);border-radius:999px;
+    padding:6px 6px 6px 16px;margin-bottom:10px;
+  }
+  .comment-input{
+    flex:1;min-width:0;border:none;background:none;outline:none;
+    color:var(--text);font-family:inherit;font-size:14px;padding:8px 0;
+  }
+  .comment-submit{
+    width:32px;height:32px;border-radius:50%;flex:none;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--amber);color:#fff;border:none;cursor:pointer;
+  }
+  .comment-submit svg{width:16px;height:16px;}
+  .comment-msg{font-size:12px;color:var(--amber);padding-left:16px;min-height:14px;}
+  .comment-list{list-style:none;clear:both;}
+  .comment-row{display:flex;gap:10px;padding:14px 0;border-bottom:1px solid var(--surface-border);}
+  .comment-row:last-child{border-bottom:none;}
+  .comment-main{flex:1;min-width:0;}
+  .comment-body{font-size:14px;line-height:1.6;color:var(--text);margin-top:2px;white-space:pre-wrap;word-break:break-word;}
+  .comment-empty{font-size:13px;color:var(--text-muted);padding:8px 0;}
+
+  @media (max-width:520px){ .camps{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="logo-lockup" href="index.html">
+    <svg class="logo-mark" viewBox="0 0 100 34" width="50" height="17" aria-label="VC">
+      <g transform="scale(1.47,1)">
+        <text y="27" font-family="Pretendard, sans-serif" font-weight="600" font-size="34" letter-spacing="-0.015em" fill="var(--text)">VC</text>
+      </g>
+    </svg>
+  </a>
+  <div class="navicons">
+    <div class="round" id="theme-toggle" aria-label="테마 전환">
+      <svg id="theme-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></svg>
+    </div>
+    <a class="round" href="index.html" aria-label="홈으로">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+    </a>
+  </div>
+</nav>
+
+<main class="wrap">
+  <div class="page-title">오늘의 예측</div>
+  <p class="page-sub">다음 거래일 코스피, 당신의 한 표 vs 유튜버들의 콜 · 하루에 한 표 · 투자 권유 아님</p>
+
+  <div class="vote-card">
+    <div class="vote-label" id="vote-benchmark">코스피 기준</div>
+    <div class="vote-question">다음 거래일, 코스피는 간다 vs 빠진다?</div>
+    <div class="vote-buttons">
+      <button class="vote-btn up" id="vote-up">📈 간다</button>
+      <button class="vote-btn down" id="vote-down">📉 빠진다</button>
+    </div>
+    <div class="vote-bar" id="vote-bar">
+      <div class="vote-bar-up" id="vote-bar-up" style="width:50%"></div>
+      <div class="vote-bar-down" id="vote-bar-down" style="width:50%"></div>
+    </div>
+    <div class="vote-counts">
+      <span id="vote-count-up">간다 0표</span>
+      <span id="vote-count-down">빠진다 0표</span>
+    </div>
+    <div class="vote-msg" id="vote-msg"></div>
+  </div>
+
+  <div class="panel-title">오늘의 진영</div>
+  <div class="panel-sub">유튜버들의 최근 단기 콜(3일 이내 · +1거래일 지평만) 기준</div>
+  <div class="camps">
+    <div class="camp-col up">
+      <div class="camp-head">📈 간다파</div>
+      <ul class="camp-list" id="camp-up"><li class="camp-empty">조건에 맞는 최근 콜이 없어요.</li></ul>
+    </div>
+    <div class="camp-col down">
+      <div class="camp-head">📉 빠진다파</div>
+      <ul class="camp-list" id="camp-down"><li class="camp-empty">조건에 맞는 최근 콜이 없어요.</li></ul>
+    </div>
+  </div>
+  <p class="camp-note">지평이 긴 콜(예: "하반기 전망")이나 3일 넘게 지난 콜은 오늘의 진영에서 제외돼요 — 오늘/내일 얘기가 아닌 발언까지 오늘의 표로 잘못 세지 않기 위해서예요.</p>
+
+  <div class="panel-title">오늘의 한줄</div>
+  <div class="panel-sub">간다? 빠진다? 이유를 한 줄로 남겨보세요.</div>
+  <div class="comment-form">
+    <div class="comment-identity">
+      <div class="comment-avatar" id="my-avatar"></div>
+      <span class="comment-nickname" id="my-nickname"></span>
+      <button class="reroll-btn" id="reroll-btn">랜덤 변경</button>
+    </div>
+    <div class="comment-input-row">
+      <input type="text" class="comment-input" id="comment-input" placeholder="한 줄로 이유를 남겨보세요" maxlength="100">
+      <button class="comment-submit" id="comment-submit" aria-label="댓글 남기기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+      </button>
+    </div>
+    <div class="comment-msg" id="comment-msg"></div>
+  </div>
+  <ul class="comment-list" id="comment-list"></ul>
+</main>
+
+<script src="vendor/supabase.min.js"></script>
+<script src="supabase-config.js"></script>
+<script>
+  var SUN = '<circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="4" y1="12" x2="2" y2="12"/><line x1="22" y1="12" x2="20" y2="12"/><line x1="19.07" y1="4.93" x2="17.66" y2="6.34"/><line x1="6.34" y1="17.66" x2="4.93" y2="19.07"/><line x1="19.07" y1="19.07" x2="17.66" y2="17.66"/><line x1="6.34" y1="6.34" x2="4.93" y2="4.93"/>';
+  var MOON = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+  var themeIcon = document.getElementById('theme-icon');
+  function applyTheme(t){
+    document.documentElement.dataset.theme = t;
+    localStorage.setItem('theme', t);
+    themeIcon.innerHTML = t === 'light' ? MOON : SUN;
+  }
+  applyTheme(localStorage.getItem('theme') || 'dark');
+  document.getElementById('theme-toggle').addEventListener('click', function(){
+    applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
+  });
+
+  function esc(s){
+    return (s || '').replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  var TODAY_FN_URL = SUPABASE_URL + '/functions/v1/super-action';
+
+  /* ---- 투표 ---- */
+  var votedKey = 'today_voted_' + new Date().toISOString().slice(0, 10);
+
+  function loadStatus(){
+    fetch(TODAY_FN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY },
+      body: JSON.stringify({ action: 'today-status' })
+    }).then(function(r){ return r.json(); }).then(function(res){
+      if(res.error) return;
+      renderVoteCounts(res.upVotes, res.downVotes);
+      renderCamps(res.campUp || [], res.campDown || []);
+      if(res.myVote) lockVoteUI(res.myVote);
+    });
+  }
+
+  function renderVoteCounts(up, down){
+    var total = up + down;
+    var upPct = total ? Math.round(up / total * 100) : 50;
+    document.getElementById('vote-bar-up').style.width = upPct + '%';
+    document.getElementById('vote-bar-down').style.width = (100 - upPct) + '%';
+    document.getElementById('vote-count-up').textContent = '간다 ' + up + '표';
+    document.getElementById('vote-count-down').textContent = '빠진다 ' + down + '표';
+  }
+
+  function renderCamps(up, down){
+    var upEl = document.getElementById('camp-up');
+    var downEl = document.getElementById('camp-down');
+    upEl.innerHTML = up.length ? up.map(function(n){ return '<li>' + esc(n) + '</li>'; }).join('') : '<li class="camp-empty">조건에 맞는 최근 콜이 없어요.</li>';
+    downEl.innerHTML = down.length ? down.map(function(n){ return '<li>' + esc(n) + '</li>'; }).join('') : '<li class="camp-empty">조건에 맞는 최근 콜이 없어요.</li>';
+  }
+
+  function lockVoteUI(direction){
+    localStorage.setItem(votedKey, direction);
+    document.getElementById('vote-up').disabled = true;
+    document.getElementById('vote-down').disabled = true;
+    document.getElementById('vote-up').classList.toggle('picked', direction === 'up');
+    document.getElementById('vote-down').classList.toggle('picked', direction === 'down');
+    document.getElementById('vote-msg').textContent = '오늘 투표 완료! 내일 다시 투표할 수 있어요.';
+  }
+
+  if(localStorage.getItem(votedKey)) lockVoteUI(localStorage.getItem(votedKey));
+
+  function castVote(direction){
+    if(localStorage.getItem(votedKey)) return;
+    document.getElementById('vote-up').disabled = true;
+    document.getElementById('vote-down').disabled = true;
+    fetch(TODAY_FN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY },
+      body: JSON.stringify({ action: 'today-vote', direction: direction })
+    }).then(function(r){ return r.json(); }).then(function(res){
+      if(res.error){
+        document.getElementById('vote-msg').textContent = res.error;
+        if(res.error.indexOf('이미') === -1){
+          document.getElementById('vote-up').disabled = false;
+          document.getElementById('vote-down').disabled = false;
+        } else {
+          lockVoteUI(direction); // 서버가 "이미 투표함"이라 하면 로컬도 맞춰서 잠금
+        }
+        return;
+      }
+      lockVoteUI(direction);
+      loadStatus();
+    }).catch(function(){
+      document.getElementById('vote-up').disabled = false;
+      document.getElementById('vote-down').disabled = false;
+      document.getElementById('vote-msg').textContent = '투표 실패, 다시 시도해주세요.';
+    });
+  }
+  document.getElementById('vote-up').addEventListener('click', function(){ castVote('up'); });
+  document.getElementById('vote-down').addEventListener('click', function(){ castVote('down'); });
+
+  loadStatus();
+
+  /* ---- 댓글: post.html과 동일한 랜덤 정체성·모더레이션 흐름 ---- */
+  var COMMENT_ADJS = ['씩씩한','유쾌한','다정한','용감한','엉뚱한','차분한','활발한','느긋한','상냥한','똑똑한','부지런한','소심한','명랑한','시크한','든든한','살가운','재빠른','어여쁜','늠름한','수줍은'];
+  var COMMENT_ANIMALS = {
+    '치타':'🐆','알파카':'🦙','사자':'🦁','여우':'🦊','곰':'🐻','토끼':'🐰','고양이':'🐱','강아지':'🐶',
+    '판다':'🐼','펭귄':'🐧','코알라':'🐨','다람쥐':'🐿️','부엉이':'🦉','수달':'🦦','하마':'🦛','기린':'🦒',
+    '호랑이':'🐯','늑대':'🐺','오소리':'🦡','낙타':'🐫'
+  };
+  var AVATAR_COLORS = ['#ffd9a8','#a8d8ff','#c9a8ff','#a8ffd0','#ffb8d0','#ffe9a8','#a8f0ff','#d0ffa8'];
+  var myIdentity = null;
+
+  function pick(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
+  function rollIdentity(){
+    var animals = Object.keys(COMMENT_ANIMALS);
+    var adj = pick(COMMENT_ADJS), animal = pick(animals);
+    var nickname = adj + animal;
+    var colorIdx = 0;
+    for(var i = 0; i < nickname.length; i++) colorIdx += nickname.charCodeAt(i);
+    myIdentity = { nickname: nickname, emoji: COMMENT_ANIMALS[animal], color: AVATAR_COLORS[colorIdx % AVATAR_COLORS.length] };
+    return myIdentity;
+  }
+  function paintIdentity(){
+    var av = document.getElementById('my-avatar');
+    av.style.background = myIdentity.color;
+    av.textContent = myIdentity.emoji;
+    document.getElementById('my-nickname').textContent = myIdentity.nickname;
+  }
+  function animalOf(nickname){
+    var animals = Object.keys(COMMENT_ANIMALS);
+    for(var i = 0; i < animals.length; i++){ if(nickname.indexOf(animals[i]) !== -1) return animals[i]; }
+    return null;
+  }
+  function commentAvatarHtml(nickname, emoji){
+    var colorIdx = 0;
+    for(var i = 0; i < nickname.length; i++) colorIdx += nickname.charCodeAt(i);
+    var color = AVATAR_COLORS[colorIdx % AVATAR_COLORS.length];
+    return '<div class="comment-avatar" style="background:' + color + '">' + emoji + '</div>';
+  }
+
+  rollIdentity();
+  paintIdentity();
+  document.getElementById('reroll-btn').addEventListener('click', function(){
+    rollIdentity();
+    paintIdentity();
+  });
+  document.getElementById('comment-input').addEventListener('keydown', function(e){
+    if(e.key === 'Enter'){ e.preventDefault(); document.getElementById('comment-submit').click(); }
+  });
+  document.getElementById('comment-submit').addEventListener('click', function(){
+    var input = document.getElementById('comment-input');
+    var text = input.value.trim();
+    var msg = document.getElementById('comment-msg');
+    if(!text){ msg.textContent = '댓글 내용을 입력하세요.'; return; }
+    var btn = this;
+    btn.disabled = true;
+    msg.textContent = '올리는 중…';
+    fetch(TODAY_FN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY },
+      body: JSON.stringify({ action: 'today-comment', nickname: myIdentity.nickname, avatar_seed: myIdentity.nickname, body: text })
+    }).then(function(r){ return r.json(); }).then(function(res){
+      btn.disabled = false;
+      if(res.error){ msg.textContent = res.error; return; }
+      msg.textContent = res.hidden ? '링크가 포함돼 있어 검토 후 노출돼요.' : '';
+      input.value = '';
+      if(res.data && res.data.nickname !== myIdentity.nickname){
+        myIdentity.nickname = res.data.nickname;
+        paintIdentity();
+      }
+      loadComments();
+    }).catch(function(){ btn.disabled = false; msg.textContent = '올리기 실패, 다시 시도해주세요.'; });
+  });
+
+  function loadComments(){
+    var today = new Date().toISOString().slice(0, 10);
+    db.from('today_comments').select('*').eq('vote_date', today).order('created_at', {ascending:false}).then(function(res){
+      var list = document.getElementById('comment-list');
+      var comments = res.data || [];
+      if(comments.length === 0){
+        list.innerHTML = '<li class="comment-empty">첫 한줄을 남겨보세요.</li>';
+        return;
+      }
+      list.innerHTML = comments.map(function(c){
+        var emoji = COMMENT_ANIMALS[animalOf(c.nickname)] || '🐾';
+        return '<li class="comment-row">' +
+          commentAvatarHtml(c.nickname, emoji) +
+          '<div class="comment-main">' +
+            '<span class="comment-nickname">' + esc(c.nickname) + '</span>' +
+            '<div class="comment-body">' + esc(c.body) + '</div>' +
+          '</div>' +
+        '</li>';
+      }).join('');
+    });
+  }
+  loadComments();
+</script>
+</body>
+</html>

@@ -209,6 +209,28 @@ function computeVisionaryRanking(calls) {
   return { rows, baseline };
 }
 
+/* ---- 오늘의 예측: 유튜버 "최근 콜"을 오늘의 간다/빠진다 진영으로 묶을 때, 지평이 다른
+   콜(예: "하반기 전망")이나 며칠 지난 낡은 콜까지 오늘 진영으로 잘못 대표시키지 않도록
+   두 조건을 다 거른다 -- 짧은(+1거래일) 지평이면서 최근 3일 이내인 콜만 인정한다. ---- */
+function computeTodayCamps(calls, todayStr) {
+  const today = new Date(todayStr + 'T00:00:00Z');
+  const cutoff = new Date(today);
+  cutoff.setUTCDate(cutoff.getUTCDate() - 3);
+
+  const latestByInfluencer = {};
+  calls.forEach((c) => {
+    if (c.horizon_label !== '+1거래일') return; // 장기 콜 제외 -- 지평 불일치 방지
+    if (new Date(c.statement_date + 'T00:00:00Z') < cutoff) return; // 3일 넘은 콜 제외 -- 신선도
+    const existing = latestByInfluencer[c.influencer_name];
+    if (!existing || c.statement_date > existing.statement_date) latestByInfluencer[c.influencer_name] = c;
+  });
+
+  const up = [], down = [];
+  Object.values(latestByInfluencer).forEach((c) => (c.direction === 'up' ? up : down).push(c.influencer_name));
+  up.sort(); down.sort();
+  return { up, down };
+}
+
 /* ---- 댓글 모더레이션: 욕설은 마스킹(*), 링크는 자동 숨김(hidden -- 삭제 아님, 에디터가 검토 가능).
    완벽한 우회 방지는 아님(정직하게): 자모 분리·유니코드 유사문자 치환 같은 정교한 회피까지는 못 잡음
    -- ponytail: 필요해지면 유지관리되는 공개 금칙어 데이터셋으로 교체. 지금은 흔한 표현 위주 자체 목록. ---- */
@@ -613,6 +635,32 @@ Deno.serve(async (req) => {
       });
     }
 
+    // 오늘의 예측 현황: 읽기 전용이라 VPN 판별 불필요. 투표/댓글 작성은 아래(VPN 통과 후)에서 처리.
+    if (body.action === 'today-status') {
+      const ip = detectIp(req);
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL'),
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
+      );
+      const today = new Date().toISOString().slice(0, 10);
+      const recentCutoff = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const [votesRes, myVoteRes, callsRes] = await Promise.all([
+        supabaseAdmin.from('daily_votes').select('direction').eq('vote_date', today),
+        supabaseAdmin.from('daily_votes').select('direction').eq('vote_date', today).eq('ip', ip).maybeSingle(),
+        supabaseAdmin.from('visionary_calls').select('influencer_name,direction,horizon_label,statement_date')
+          .gte('statement_date', recentCutoff),
+      ]);
+      const votes = votesRes.data || [];
+      const camps = computeTodayCamps(callsRes.data || [], today);
+      return new Response(JSON.stringify({
+        voteDate: today,
+        upVotes: votes.filter((v) => v.direction === 'up').length,
+        downVotes: votes.filter((v) => v.direction === 'down').length,
+        myVote: myVoteRes.data ? myVoteRes.data.direction : null,
+        campUp: camps.up, campDown: camps.down,
+      }), { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+    }
+
     // 스케줄러(cron)가 주기적으로 호출 - 방문자 요청이 아니라 VPN/국가 판별은 필요 없음.
     // [보안 강화] 이 분기는 원래 인증 없이 열려 있었다 -- action 이름만 알면(코드가 공개
     // 저장소에 있으니 누구나 안다) anon 키만으로 아무나 호출할 수 있었고, 호출될 때마다
@@ -721,6 +769,64 @@ Deno.serve(async (req) => {
       // 광고/스팸 계정이 바로 알아채고 회피법을 학습하게 됨 -- 응답에서 hidden 여부만 안내하고
       // data 자체는 그대로 돌려줘서(내 댓글 목록에 내가 쓴 건 보이게), 실제 화면 노출은
       // loadComments()가 hidden=false만 쿼리하므로 자동으로 걸러짐.
+      return new Response(JSON.stringify({ data, hidden }), {
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (body.action === 'today-vote') {
+      const direction = body.direction === 'up' || body.direction === 'down' ? body.direction : null;
+      if (!direction) throw new Error('direction이 필요해요.');
+      const today = new Date().toISOString().slice(0, 10);
+      const { error } = await supabase.from('daily_votes').insert({ vote_date: today, ip, direction });
+      if (error) {
+        if (error.code === '23505') { // unique_violation: (vote_date, ip) 중복 -- 하루 1표
+          return new Response(JSON.stringify({ error: '오늘은 이미 투표했어요.' }), {
+            status: 409, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+          });
+        }
+        throw error;
+      }
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (body.action === 'today-comment') {
+      const nickname = maskProfanity(String(body.nickname || '').trim().slice(0, 20));
+      const avatarSeed = String(body.avatar_seed || '').trim().slice(0, 40);
+      const rawText = String(body.body || '').trim().slice(0, 100);
+      const text = maskProfanity(rawText);
+      const hidden = containsLink(rawText);
+      if (!nickname || !text) throw new Error('입력값이 비어있어요.');
+
+      // comment_rate_limit을 글 댓글과 공유한다 -- 같은 IP당 15초 제한이라는 목적이 동일해서
+      // 테이블을 따로 안 둔다(오늘의 예측 댓글을 올리면 잠깐 글 댓글도 못 쓰게 되지만, 부담이
+      // 적은 트레이드오프로 판단).
+      const RATE_LIMIT_SECONDS = 15;
+      const { data: rl } = await supabase.from('comment_rate_limit').select('last_at').eq('ip', ip).maybeSingle();
+      if (rl && Date.now() - new Date(rl.last_at).getTime() < RATE_LIMIT_SECONDS * 1000) {
+        return new Response(JSON.stringify({ error: '너무 빠르게 연속 작성했어요. 잠시 후 다시 시도해주세요.' }), {
+          status: 429, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        });
+      }
+      await supabase.from('comment_rate_limit').upsert({ ip, last_at: new Date().toISOString() });
+
+      const today = new Date().toISOString().slice(0, 10);
+      const { data: existingRows } = await supabase.from('today_comments').select('nickname').eq('vote_date', today);
+      const existingNames = new Set((existingRows || []).map((r) => r.nickname));
+      let finalNickname = nickname;
+      if (existingNames.has(finalNickname)) {
+        let n = 2;
+        while (existingNames.has(nickname + n)) n++;
+        finalNickname = nickname + n;
+      }
+
+      const { data, error } = await supabase.from('today_comments').insert({
+        vote_date: today, nickname: finalNickname, avatar_seed: avatarSeed, body: text,
+        ip_prefix: prefix, country, hidden, hidden_reason: hidden ? 'link' : null,
+      }).select().single();
+      if (error) throw error;
       return new Response(JSON.stringify({ data, hidden }), {
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
       });
