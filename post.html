@@ -801,7 +801,7 @@
       }).then(function(r){ return r.json(); }).then(function(res){
         btn.disabled = false;
         if(res.error){ msg.textContent = res.error; return; }
-        msg.textContent = '';
+        msg.textContent = res.hidden ? '링크가 포함돼 있어 검토 후 노출돼요.' : '';
         input.value = '';
         if(res.data && res.data.nickname !== myIdentity.nickname){
           myIdentity.nickname = res.data.nickname; // 중복이라 서버에서 번호가 붙었을 수 있음
@@ -853,6 +853,12 @@
       return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
     });
   }
+  // 외부 RSS(구글 뉴스 등)에서 받은 링크를 href 속성에 그대로 꽂으면 두 가지가 뚫린다:
+  // (1) 따옴표가 섞여있으면 속성 밖으로 탈출해 임의 속성 주입, (2) "javascript:" 스킴이면
+  // HTML 이스케이프를 통과하고도 클릭 시 실행됨. 그래서 http(s)만 허용하고 나머지는 '#'로 막는다.
+  function wcSafeHref(url){
+    return /^https?:\/\//i.test(url || '') ? wcEscape(url) : '#';
+  }
   var wcCoverageCache = {};
   function wcLoadCoverage(postId){
     if(wcCoverageCache[postId]) return wcCoverageCache[postId];
@@ -881,7 +887,7 @@
               '<div class="source-row"><span class="source-badge">' + wcEscape(r.source.slice(0,1)) + '</span>' +
               '<span>' + wcEscape(r.source) + '</span></div>' +
               '<blockquote>' + wcEscape(r.item.title) + '</blockquote>' +
-              '<a class="source-link" href="' + r.item.link + '" target="_blank" rel="noopener">더 알아보기 →</a>' +
+              '<a class="source-link" href="' + wcSafeHref(r.item.link) + '" target="_blank" rel="noopener">더 알아보기 →</a>' +
             '</div>';
           }).join('') +
         '</div>' +

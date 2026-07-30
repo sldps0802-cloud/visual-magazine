@@ -204,10 +204,39 @@
   .reveal{opacity:0;transform:translateY(16px);transition:opacity .6s ease-out,transform .6s ease-out;}
   .reveal.in-view{opacity:1;transform:none;}
 
+  /* ---- visionary (win-rate ranking) ---- */
+  .visionary{margin-top:64px;}
+  .visionary-baseline{
+    font-size:13px;line-height:1.6;color:var(--text-muted);
+    background:var(--surface);border:1px solid var(--surface-border);
+    border-radius:10px;padding:12px 16px;margin-bottom:20px;
+  }
+  .visionary-list{list-style:none;}
+  .visionary-row{
+    display:flex;align-items:center;gap:16px;
+    padding:16px 0;border-bottom:1px solid var(--surface-border);
+  }
+  .visionary-row:first-child{padding-top:0;}
+  .visionary-rank{font-weight:800;color:var(--amber);width:20px;flex:none;text-align:center;}
+  .visionary-name{font-weight:700;font-size:15px;flex:1;min-width:0;}
+  .visionary-badge{
+    font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;
+    background:var(--surface);border:1px solid var(--surface-border);color:var(--text-muted);
+    margin-left:8px;white-space:nowrap;
+  }
+  .visionary-stats{display:flex;align-items:baseline;gap:4px;flex:none;text-align:right;}
+  .visionary-winrate{font-size:18px;font-weight:800;}
+  .visionary-sample{font-size:12px;color:var(--text-muted);}
+  .visionary-alpha{font-size:12px;font-weight:700;width:80px;flex:none;text-align:right;color:var(--text-muted);}
+  .visionary-alpha.pos{color:#7dd88a;}
+  .visionary-alpha.neg{color:var(--amber);}
+  .visionary-note{font-size:12px;line-height:1.7;color:var(--text-muted);margin-top:20px;}
+
   @media (max-width:760px){
     .feature-grid{grid-template-columns:1fr;}
     .content-grid{grid-template-columns:1fr;}
     .navlinks{display:none;}
+    .visionary-alpha{display:none;}
   }
 </style>
 </head>
@@ -227,6 +256,7 @@
       <a href="#">머니</a>
       <a href="#">커리어</a>
       <a href="#">칼럼</a>
+      <a href="#visionary-section">비저너리</a>
     </nav>
     <div class="navicons">
       <div class="round">
@@ -274,6 +304,16 @@
         <li class="empty-note">아직 등록된 글이 없어요.</li>
       </ul>
     </div>
+  </section>
+
+  <section class="visionary" id="visionary-section">
+    <div class="panel-title reveal">비저너리</div>
+    <div class="panel-sub reveal">경제 유튜버·인플루언서 발언 승률 랭킹 · 특정 종목 매매를 권유하지 않습니다</div>
+    <div class="visionary-baseline reveal" id="visionary-baseline" style="display:none;"></div>
+    <ol class="visionary-list reveal" id="visionary-list">
+      <li class="empty-note">아직 채점된 발언이 없어요.</li>
+    </ol>
+    <p class="visionary-note reveal">판정은 부호(적중·빗나감)뿐 아니라 같은 기간 벤치마크 대비 초과수익도 함께 봅니다. 판정된 발언이 15건 미만인 인물은 "표본부족"으로 표시합니다 — 표본이 적을수록 승률은 우연에 크게 흔들립니다. 이 랭킹은 발언-결과의 기록일 뿐 인물 평가나 투자 조언이 아니며, 판단과 그 결과의 책임은 전적으로 본인에게 있습니다.</p>
   </section>
 
   <section class="feed">
@@ -354,6 +394,39 @@
     renderFeed(posts.slice(0, 6));
     checkReveal();
   });
+
+  // 승률·초과수익 계산식은 서버(Edge Function)로 옮겼다 -- view-source로 그대로 복사되지
+  // 않게, 클라이언트는 완성된 결과만 받아서 그리기만 한다.
+  fetch(SUPABASE_URL + '/functions/v1/super-action', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY },
+    body: JSON.stringify({ action: 'visionary-ranking' })
+  }).then(function(r){ return r.json(); }).then(function(result){
+    renderVisionary(result.rows || [], result.baseline);
+    checkReveal();
+  }).catch(function(){});
+
+  function renderVisionary(rows, baseline){
+    if(rows.length === 0) return;
+
+    if(baseline != null){
+      var baselineEl = document.getElementById('visionary-baseline');
+      baselineEl.style.display = '';
+      baselineEl.textContent = '참고 · 같은 기간 벤치마크는 판정 구간의 ' + Math.round(baseline) + '%에서 상승했어요. 이보다 낮은 승률은 그냥 시장을 따라간 것만 못하다는 뜻이에요.';
+    }
+
+    var list = document.getElementById('visionary-list');
+    list.innerHTML = rows.map(function(r, i){
+      var alphaText = r.avgAlpha === null ? '—' : (r.avgAlpha >= 0 ? '+' : '') + r.avgAlpha.toFixed(1) + '%p';
+      var alphaClass = r.avgAlpha === null ? '' : (r.avgAlpha >= 0 ? 'pos' : 'neg');
+      return '<li class="visionary-row reveal">' +
+        '<span class="visionary-rank">' + (i + 1) + '</span>' +
+        '<span class="visionary-name">' + esc(r.name) + (r.lowSample ? '<span class="visionary-badge">표본부족</span>' : '') + '</span>' +
+        '<span class="visionary-stats"><span class="visionary-winrate">' + Math.round(r.winRate) + '%</span><span class="visionary-sample">&nbsp;' + r.hit + '·' + r.total + '</span></span>' +
+        '<span class="visionary-alpha ' + alphaClass + '">' + alphaText + '</span>' +
+      '</li>';
+    }).join('');
+  }
 
   function renderHero(posts){
     var grid = document.getElementById('hero-grid');

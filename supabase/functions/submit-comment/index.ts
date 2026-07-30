@@ -164,6 +164,76 @@ async function classifyIp(ip) {
   return { prefix: parts[0] + '.' + parts[1], country: match ? match[2] : null, isVpn: isKnownVpn || isServerHost };
 }
 
+/* ---- 비저너리 승률 랭킹 계산: 원래 fortune_site/index.html 클라이언트 JS에 있던 로직을
+   그대로 옮김. 원본 발언 기록(visionary_calls)은 신빙성을 위해 계속 공개 조회 가능하게
+   두지만(어느 발언으로 판정했는지 투명하게 보여야 랭킹을 신뢰할 수 있음), 승률·초과수익·
+   표본부족 기준 같은 "계산식"은 view-source로 그대로 복사되지 않도록 서버에서 계산해서
+   완성된 숫자만 내려준다. ---- */
+function callExcessReturn(c) {
+  if (c.price_at_call == null || c.price_at_judge == null || c.benchmark_return_pct == null) return null;
+  const assetReturn = (c.price_at_judge - c.price_at_call) / c.price_at_call * 100;
+  const callReturn = c.direction === 'up' ? assetReturn : -assetReturn;
+  return callReturn - c.benchmark_return_pct;
+}
+function computeVisionaryRanking(calls) {
+  const judged = calls.filter((c) => c.status === 'hit' || c.status === 'miss');
+  if (judged.length === 0) return { rows: [], baseline: null };
+
+  let baseline = null;
+  const baselineSamples = judged.filter((c) => c.benchmark_return_pct != null);
+  if (baselineSamples.length > 0) {
+    baseline = baselineSamples.filter((c) => c.benchmark_return_pct > 0).length / baselineSamples.length * 100;
+  }
+
+  const byName = {};
+  judged.forEach((c) => {
+    const g = byName[c.influencer_name] || (byName[c.influencer_name] = { hit: 0, total: 0, alphaSum: 0, alphaN: 0 });
+    g.total++;
+    if (c.status === 'hit') g.hit++;
+    const excess = callExcessReturn(c);
+    if (excess !== null) { g.alphaSum += excess; g.alphaN++; }
+  });
+
+  const rows = Object.keys(byName).map((name) => {
+    const g = byName[name];
+    return {
+      name,
+      hit: g.hit,
+      total: g.total,
+      winRate: g.hit / g.total * 100,
+      avgAlpha: g.alphaN ? g.alphaSum / g.alphaN : null,
+      lowSample: g.total < 15,
+    };
+  }).sort((a, b) => b.winRate - a.winRate);
+
+  return { rows, baseline };
+}
+
+/* ---- 댓글 모더레이션: 욕설은 마스킹(*), 링크는 자동 숨김(hidden -- 삭제 아님, 에디터가 검토 가능).
+   완벽한 우회 방지는 아님(정직하게): 자모 분리·유니코드 유사문자 치환 같은 정교한 회피까지는 못 잡음
+   -- ponytail: 필요해지면 유지관리되는 공개 금칙어 데이터셋으로 교체. 지금은 흔한 표현 위주 자체 목록. ---- */
+const PROFANITY_WORDS = [
+  '씨발', '씨팔', '시발', '시팔', '개새끼', '개새기', '병신', '븅신', '좆', '존나', '조낸',
+  '개소리', '지랄', '미친놈', '미친년', '창녀', '걸레같', '화냥년', '개년', '개자식', '등신',
+  '느금', '니미', '애미', '보지', '자지', '섹스', 'ㅅㅂ', 'ㅄ', 'ㅗㅜㅑ', 'ㅁㅊ', 'ㅈㄴ',
+];
+function escapeRegex(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+// 글자 사이에 공백·기호가 최대 2개 끼어도 잡음 (예: "씨 발", "씨.발") -- {0,2}로 상한을 둬서
+// 역추적 폭발(ReDoS) 걱정 없음 (본문은 어차피 100자로 잘려 들어옴).
+const PROFANITY_RE = new RegExp(
+  PROFANITY_WORDS.map((w) => Array.from(w).map(escapeRegex).join('[\\s\\W]{0,2}')).join('|'),
+  'gi',
+);
+function maskProfanity(text) {
+  return text.replace(PROFANITY_RE, (m) => '*'.repeat(m.length));
+}
+const LINK_RE = /(https?:\/\/|www\.|\b[a-z0-9-]+\.(com|net|org|co|kr|io|me|ly|gg|xyz|shop|link|click|top|info)\b)/i;
+function containsLink(text) {
+  return LINK_RE.test(text);
+}
+
 // '엇갈린 시선/놓친 이야기'가 쓰는 RSS 소스 도메인만 허용 (오픈 프록시로 악용되는 것 방지)
 const RSS_HOST_ALLOWLIST = [
   'scmp.com', 'eurasianet.org', 'thehindu.com', 'bangkokpost.com', 'aljazeera.com',
@@ -527,8 +597,35 @@ Deno.serve(async (req) => {
       return new Response(text, { headers: { ...CORS_HEADERS, 'Content-Type': 'text/plain; charset=utf-8' } });
     }
 
-    // 스케줄러(cron)가 주기적으로 호출 - 방문자 요청이 아니라 VPN/국가 판별은 필요 없음
+    // 비저너리 랭킹: 읽기 전용 공개 계산이라 VPN 판별 불필요. service_role로 읽는 이유는
+    // 별도 anon 클라이언트를 새로 안 만들려는 것뿐 -- visionary_calls는 RLS가 이미 전체
+    // 공개 조회를 허용해서 service_role이든 anon이든 결과는 같다(권한 상승 아님).
+    if (body.action === 'visionary-ranking') {
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL'),
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
+      );
+      const { data, error } = await supabaseAdmin.from('visionary_calls')
+        .select('influencer_name,direction,status,price_at_call,price_at_judge,benchmark_return_pct');
+      if (error) throw error;
+      return new Response(JSON.stringify(computeVisionaryRanking(data || [])), {
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // 스케줄러(cron)가 주기적으로 호출 - 방문자 요청이 아니라 VPN/국가 판별은 필요 없음.
+    // [보안 강화] 이 분기는 원래 인증 없이 열려 있었다 -- action 이름만 알면(코드가 공개
+    // 저장소에 있으니 누구나 안다) anon 키만으로 아무나 호출할 수 있었고, 호출될 때마다
+    // 전체 글을 순회하며 외부 RSS·LLM(Groq/Cerebras/Gemini) 호출을 대량으로 일으킨다 --
+    // 무료 API 한도 소진·DoS성 남용에 그대로 노출돼 있었다. CRON_SECRET 환경변수를 설정하고
+    // 호출부(스케줄러)가 같은 값을 x-cron-secret 헤더로 보내야만 통과하게 막는다.
     if (body.action === 'refresh-coverage') {
+      const cronSecret = Deno.env.get('CRON_SECRET');
+      if (!cronSecret || req.headers.get('x-cron-secret') !== cronSecret) {
+        return new Response(JSON.stringify({ error: 'unauthorized' }), {
+          status: 401, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        });
+      }
       const supabaseAdmin = createClient(
         Deno.env.get('SUPABASE_URL'),
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
@@ -566,6 +663,19 @@ Deno.serve(async (req) => {
     if (body.action === 'like') {
       const postId = Number(body.post_id);
       if (!postId) throw new Error('post_id가 필요해요.');
+
+      // [보안 강화] increment_likes RPC 직접 호출은 막아뒀지만(increment-likes-lockdown-migration.sql),
+      // 이 엔드포인트 자체에는 쿨다운이 없어서 스크립트로 연타하면 여전히 무제한으로 쌓을 수 있었다.
+      // comment의 15초 제한과 같은 방식, 다만 좋아요는 부담이 적어 더 짧게 둔다.
+      const LIKE_RATE_LIMIT_SECONDS = 3;
+      const { data: rl } = await supabase.from('like_rate_limit').select('last_at').eq('ip', ip).maybeSingle();
+      if (rl && Date.now() - new Date(rl.last_at).getTime() < LIKE_RATE_LIMIT_SECONDS * 1000) {
+        return new Response(JSON.stringify({ error: '너무 빠르게 연속 요청했어요. 잠시 후 다시 시도해주세요.' }), {
+          status: 429, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        });
+      }
+      await supabase.from('like_rate_limit').upsert({ ip, last_at: new Date().toISOString() });
+
       const { error } = await supabase.rpc('increment_likes', { post_id: postId });
       if (error) throw error;
       return new Response(JSON.stringify({ ok: true }), {
@@ -575,9 +685,11 @@ Deno.serve(async (req) => {
 
     if (body.action === 'comment') {
       const postId = Number(body.post_id);
-      const nickname = String(body.nickname || '').trim().slice(0, 20);
+      const nickname = maskProfanity(String(body.nickname || '').trim().slice(0, 20));
       const avatarSeed = String(body.avatar_seed || '').trim().slice(0, 40);
-      const text = String(body.body || '').trim().slice(0, 100);
+      const rawText = String(body.body || '').trim().slice(0, 100);
+      const text = maskProfanity(rawText);
+      const hidden = containsLink(rawText);
       if (!postId || !nickname || !text) throw new Error('입력값이 비어있어요.');
 
       // 도배 방지: 같은 IP는 짧은 시간 안에 연속으로 못 올림
@@ -602,10 +714,14 @@ Deno.serve(async (req) => {
 
       const { data, error } = await supabase.from('comments').insert({
         post_id: postId, nickname: finalNickname, avatar_seed: avatarSeed, body: text,
-        ip_prefix: prefix, country,
+        ip_prefix: prefix, country, hidden, hidden_reason: hidden ? 'link' : null,
       }).select().single();
       if (error) throw error;
-      return new Response(JSON.stringify({ data }), {
+      // 숨김 처리된 댓글은 작성자 본인 화면에도 그대로 보여주면 "링크 넣으면 숨겨지는구나"를
+      // 광고/스팸 계정이 바로 알아채고 회피법을 학습하게 됨 -- 응답에서 hidden 여부만 안내하고
+      // data 자체는 그대로 돌려줘서(내 댓글 목록에 내가 쓴 건 보이게), 실제 화면 노출은
+      // loadComments()가 hidden=false만 쿼리하므로 자동으로 걸러짐.
+      return new Response(JSON.stringify({ data, hidden }), {
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
       });
     }

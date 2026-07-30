@@ -1,0 +1,11 @@
+-- 보안 강화: increment_likes()가 anon/authenticated에게 기본 EXECUTE 권한이 열려 있어서
+-- (comments-migration.sql에서 만들 때 grant를 명시하지 않음 -- Postgres는 함수 생성 시
+-- PUBLIC에 기본으로 EXECUTE를 준다), 누구나 submit-comment Edge Function을 거치지 않고
+-- /rest/v1/rpc/increment_likes 를 anon 키로 직접 호출해 VPN 판별·요청 제한을 통째로 우회하고
+-- 아무 글이나 좋아요를 무제한으로 조작할 수 있었다 (실측 확인: 존재하지 않는 post_id로도
+-- 204 성공 응답을 받아 호출 자체가 통과됨을 확인).
+--
+-- increment_views()는 의도적으로 anon 호출을 허용해둔 것과 다르다(조회수는 원래 보호 대상이
+-- 아닌 참고용 지표) -- increment_likes()만 막는다. Edge Function은 service_role 클라이언트로
+-- 부르므로 이 REVOKE와 무관하게 계속 동작한다(서비스 롤은 권한 부여 대상이 아니라 우회함).
+revoke execute on function increment_likes(bigint) from public, anon, authenticated;

@@ -455,6 +455,11 @@
       return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
     });
   }
+  // post.html과 동일한 이유: 외부 RSS 링크를 href에 그대로 넣으면 속성 탈출·javascript: 스킴
+  // 둘 다 뚫린다 -- http(s)만 허용.
+  function wcSafeHref(url){
+    return /^https?:\/\//i.test(url || '') ? wcEscape(url) : '#';
+  }
   function wcParseXML(xmlText){
     var doc = new DOMParser().parseFromString(xmlText, 'text/xml');
     if(doc.querySelector('parsererror')) return [];
@@ -537,7 +542,7 @@
               '<div class="source-row"><span class="source-badge">' + wcEscape(r.region.slice(0,1)) + '</span>' +
               '<span>' + wcEscape(r.source) + ' <em>(' + wcEscape(r.region) + ')</em></span></div>' +
               '<blockquote>' + wcEscape(r.item.title) + '</blockquote>' +
-              '<a class="source-link" href="' + r.item.link + '" target="_blank" rel="noopener">더 알아보기 →</a>' +
+              '<a class="source-link" href="' + wcSafeHref(r.item.link) + '" target="_blank" rel="noopener">더 알아보기 →</a>' +
             '</div>';
           }).join('') +
           '</div>' +
