@@ -271,55 +271,80 @@ function wcStripSourceSuffix(title, source) {
   const suffix = ' - ' + source;
   return title.endsWith(suffix) ? title.slice(0, -suffix.length) : title;
 }
-async function verifySameTopic(topic, candidateTitle) {
-  const groqKey = Deno.env.get('GROQ_API_KEY');
-  if (!groqKey) return true; // no key configured yet - fall back to keyword-only matching
+/* ---- LLM 호출: Groq(무료 티어) 먼저 쓰고, 한도가 찼거나(429) 실패하면 Gemini(무료 티어)로 자동 전환.
+   둘 다 실패하면 null - 호출부가 각자 알아서 "판단 못 함"일 때의 기본값(보통 fail-open)으로 처리함. ---- */
+async function callGroq(prompt, opts) {
+  const key = Deno.env.get('GROQ_API_KEY');
+  if (!key) return null;
   try {
     const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + groqKey },
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
-        messages: [{ role: 'user', content:
-          '다음 두 제목이 같은 구체적인 사건을 다루고 있는지 확인하세요. 단어가 겹쳐도 동명이인·동음이의어 때문에 ' +
-          '전혀 다른 사건일 수 있습니다 (예: 사람 이름과 회사 이름이 같은 경우).\n' +
-          '기준: ' + topic + '\n비교 대상: ' + candidateTitle + '\n\n' +
-          '같은 사건이면 yes, 다른 사건이면 no 라고만 답하세요.' }],
-        temperature: 0,
-        max_tokens: 5,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: opts.temperature ?? 0,
+        max_tokens: opts.maxTokens ?? 200,
+        ...(opts.json ? { response_format: { type: 'json_object' } } : {}),
       }),
     });
+    if (!r.ok) return null; // 429(한도 초과) 등 - 폴백으로 넘어감
     const data = await r.json();
-    const answer = (data.choices?.[0]?.message?.content || '').toLowerCase();
-    return answer.includes('yes');
+    return data.choices?.[0]?.message?.content || null;
   } catch {
-    return true; // Groq failure shouldn't break matching entirely - fail open to keyword result
+    return null;
   }
+}
+async function callGemini(prompt, opts) {
+  const key = Deno.env.get('GEMINI_API_KEY');
+  if (!key) return null;
+  try {
+    const r = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + key,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: opts.temperature ?? 0,
+            maxOutputTokens: opts.maxTokens ?? 200,
+            ...(opts.json ? { responseMimeType: 'application/json' } : {}),
+          },
+        }),
+      },
+    );
+    if (!r.ok) return null;
+    const data = await r.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
+  } catch {
+    return null;
+  }
+}
+async function callLLM(prompt, opts = {}) {
+  return (await callGroq(prompt, opts)) || (await callGemini(prompt, opts));
+}
+
+async function verifySameTopic(topic, candidateTitle) {
+  const prompt =
+    '다음 두 제목이 같은 구체적인 사건을 다루고 있는지 확인하세요. 단어가 겹쳐도 동명이인·동음이의어 때문에 ' +
+    '전혀 다른 사건일 수 있습니다 (예: 사람 이름과 회사 이름이 같은 경우).\n' +
+    '기준: ' + topic + '\n비교 대상: ' + candidateTitle + '\n\n' +
+    '같은 사건이면 yes, 다른 사건이면 no 라고만 답하세요.';
+  const answer = await callLLM(prompt, { maxTokens: 5 });
+  if (answer === null) return true; // 둘 다 응답 없음 - 키워드 매칭 결과로 fail-open
+  return answer.toLowerCase().includes('yes');
 }
 async function wcExtractTopic(title) {
   // 제목이 "13만명이 출근을 못해...2차대전 이후 최악"처럼 낚시성/수사적 표현이면 그걸 그대로
   // 번역해서 검색해봤자 외국 매체 검색어로는 안 맞음 - 검색에 쓸 핵심 사건만 짧게 뽑아둠
-  const groqKey = Deno.env.get('GROQ_API_KEY');
-  if (!groqKey) return title;
-  try {
-    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + groqKey },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [{ role: 'user', content:
-          '다음 기사 제목에서 낚시성 표현이나 수사적 질문은 빼고, 뉴스 검색에 바로 쓸 수 있는 핵심 사건만 ' +
-          '짧은 구절(5단어 이내)로 뽑으세요. 다른 설명 없이 검색어만 답하세요.\n\n제목: ' + title }],
-        temperature: 0,
-        max_tokens: 30,
-      }),
-    });
-    const data = await r.json();
-    const extracted = (data.choices?.[0]?.message?.content || '').trim().replace(/^["']|["']$/g, '');
-    return extracted || title;
-  } catch {
-    return title;
-  }
+  const prompt =
+    '다음 기사 제목에서 낚시성 표현이나 수사적 질문은 빼고, 뉴스 검색에 바로 쓸 수 있는 핵심 사건만 ' +
+    '짧은 구절(5단어 이내)로 뽑으세요. 다른 설명 없이 검색어만 답하세요.\n\n제목: ' + title;
+  const answer = await callLLM(prompt, { maxTokens: 30 });
+  if (answer === null) return title;
+  const extracted = answer.trim().replace(/^["']|["']$/g, '');
+  return extracted || title;
 }
 async function wcFetchMarket(searchQuery, verifyTitle, market, keywords) {
   const ctrl = new AbortController();
@@ -404,26 +429,16 @@ async function refreshCoverageForPost(supabase, post) {
 /* ---- claim-level "who skipped what": which outlets share the same specific angle,
    using a free-tier open-source model (Llama 3.3 via Groq) instead of a paid API. ---- */
 async function extractClaims(matchedResults) {
-  const groqKey = Deno.env.get('GROQ_API_KEY');
-  if (!groqKey || matchedResults.length < 2) return [];
+  if (matchedResults.length < 2) return [];
   const listing = matchedResults.map((r) => `[${r.source}] ${r.item_title}`).join('\n');
   const prompt =
     '다음은 같은 사건을 다룬 여러 언론사의 기사 제목입니다.\n\n' + listing +
     '\n\n이 제목들에서 서로 다른 핵심 주장이나 초점을 3~5개 뽑고, 각각을 어느 언론사([...] 안의 이름)가 다뤘는지 표시하세요. ' +
     '반드시 다음 JSON 형식으로만 답하세요: {"claims":[{"claim":"한 문장 요약","outlets":["언론사명", ...]}]}';
+  const answer = await callLLM(prompt, { json: true, temperature: 0.2, maxTokens: 800 });
+  if (answer === null) return [];
   try {
-    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + groqKey },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [{ role: 'user', content: prompt }],
-        response_format: { type: 'json_object' },
-        temperature: 0.2,
-      }),
-    });
-    const data = await r.json();
-    const parsed = JSON.parse(data.choices[0].message.content);
+    const parsed = JSON.parse(answer);
     return Array.isArray(parsed.claims) ? parsed.claims : [];
   } catch {
     return [];
@@ -443,6 +458,45 @@ async function refreshClaimsForPost(supabase, post, matchedResults) {
     };
   });
   await supabase.from('world_coverage_claims').insert(rows);
+}
+
+/* ---- 감정적/자극적 표현, 기자 주관이 담긴 표현 표시.
+   전용 한국어 분류 모델을 따로 호스팅하는 대신, 이미 쓰고 있는 오픈소스 LLM(Llama 3.3, Groq/Gemini
+   무료 티어)에게 분류를 맡김 - 문구를 원문 그대로 뽑게 해서 클라이언트가 본문에서 찾아 밑줄만 그으면 됨.
+   글이 바뀌지 않는 한 다시 분석할 필요가 없어서, 이미 결과가 있으면 그냥 건너뜀(LLM 호출 아끼기). ---- */
+function wcPlainText(body) {
+  return (body || '')
+    .replace(/<figure>[\s\S]*?<\/figure>/g, '')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/[#*_>`]/g, '')
+    .trim();
+}
+async function analyzeTextFlags(supabase, post) {
+  const { data: existing } = await supabase.from('post_text_flags').select('id').eq('post_id', post.id).limit(1);
+  if (existing && existing.length) return; // 이미 분석해둔 글은 다시 안 함
+
+  const plain = wcPlainText(post.body).slice(0, 6000);
+  if (!plain) return;
+  const prompt =
+    '다음은 뉴스 기사 본문입니다. 이 글에서 (1) 감정적이거나 자극적인 단어/표현과 ' +
+    '(2) 객관적 사실이 아니라 기자의 주관이 담긴 표현을 찾아주세요.\n\n본문:\n' + plain +
+    '\n\n규칙:\n' +
+    '- phrase는 본문에 실제로 있는 문구를 토씨 하나 안 틀리고 그대로, 2~6단어 정도로 짧게 뽑으세요(문장 전체 X).\n' +
+    '- reason은 왜 그런지 15자 이내로 아주 짧게 쓰세요.\n' +
+    '- 확실한 것만 5~10개 정도만 뽑으세요. 억지로 채우지 마세요.\n' +
+    '반드시 다음 JSON 형식으로만 답하세요: ' +
+    '{"flags":[{"phrase":"본문 속 문구 그대로","type":"emotional 또는 subjective","reason":"짧은 이유"}]}';
+  const answer = await callLLM(prompt, { json: true, temperature: 0.1, maxTokens: 1000 });
+  if (answer === null) return;
+  let parsed;
+  try { parsed = JSON.parse(answer); } catch { return; }
+  const flags = (Array.isArray(parsed.flags) ? parsed.flags : [])
+    .filter((f) => f && typeof f.phrase === 'string' && plain.includes(f.phrase) && (f.type === 'emotional' || f.type === 'subjective'))
+    .slice(0, 15)
+    .map((f) => ({ post_id: post.id, phrase: f.phrase, type: f.type, reason: String(f.reason || '').slice(0, 60) }));
+  if (!flags.length) return;
+  await supabase.from('post_text_flags').insert(flags);
 }
 
 Deno.serve(async (req) => {
@@ -470,6 +524,7 @@ Deno.serve(async (req) => {
       if (postsError) throw postsError;
       for (const post of posts || []) {
         await refreshCoverageForPost(supabaseAdmin, post);
+        await analyzeTextFlags(supabaseAdmin, post).catch(() => {});
       }
       return new Response(JSON.stringify({ ok: true, refreshed: (posts || []).length }), {
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },

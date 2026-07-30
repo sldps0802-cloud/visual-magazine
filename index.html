@@ -59,7 +59,9 @@
     background:var(--header-bg);
     backdrop-filter:blur(10px);
     border-bottom:1px solid var(--surface-border);
+    transition:transform .4s cubic-bezier(.32,.72,0,1);
   }
+  header.nav-hidden{transform:translateY(-100%);}
   header .wrap{
     display:flex;align-items:center;gap:32px;
     height:64px;
@@ -299,6 +301,21 @@
   document.getElementById('theme-toggle').addEventListener('click', function(){
     applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
   });
+  (function(){
+    var headerEl = document.querySelector('header');
+    var lastY = window.scrollY;
+    var ticking = false;
+    window.addEventListener('scroll', function(){
+      if(ticking) return;
+      ticking = true;
+      requestAnimationFrame(function(){
+        var y = window.scrollY;
+        headerEl.classList.toggle('nav-hidden', y > lastY && y > 80);
+        lastY = y;
+        ticking = false;
+      });
+    }, { passive: true });
+  })();
 
   function checkReveal(){
     document.querySelectorAll('.reveal').forEach(function(el){
