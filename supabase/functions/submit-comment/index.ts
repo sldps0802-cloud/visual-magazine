@@ -644,6 +644,34 @@ Deno.serve(async (req) => {
       });
     }
 
+    // visual-magazine-admin의 아이디 로그인용 이메일 조회. VPN 사용자도 정상적으로 로그인은
+    // 할 수 있어야 하니 VPN 차단은 안 걸고(그건 댓글/좋아요 어뷰징용 게이트라 목적이 다름),
+    // IP당 쿨다운만 건다 -- 이거 없이 anon에게 RPC를 직접 열어두면 아이디를 무작위로 시도해서
+    // 회원 이메일을 긁어모으는 열거 공격이 가능했다(email-lookup-lockdown-migration.sql 참고).
+    if (body.action === 'lookup-email') {
+      const ip = detectIp(req);
+      const username = String(body.username || '').trim().slice(0, 40);
+      if (!username) throw new Error('아이디가 필요해요.');
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL'),
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
+      );
+      const LOOKUP_RATE_LIMIT_SECONDS = 3;
+      const { data: rl } = await supabaseAdmin.from('email_lookup_rate_limit').select('last_at').eq('ip', ip).maybeSingle();
+      if (rl && Date.now() - new Date(rl.last_at).getTime() < LOOKUP_RATE_LIMIT_SECONDS * 1000) {
+        return new Response(JSON.stringify({ error: '너무 빠르게 연속 시도했어요. 잠시 후 다시 시도해주세요.' }), {
+          status: 429, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        });
+      }
+      await supabaseAdmin.from('email_lookup_rate_limit').upsert({ ip, last_at: new Date().toISOString() });
+
+      const { data: email, error } = await supabaseAdmin.rpc('get_email_by_username', { uname: username });
+      if (error) throw error;
+      return new Response(JSON.stringify({ email: email || null }), {
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    }
+
     // 오늘의 예측 현황: 읽기 전용이라 VPN 판별 불필요. 투표/댓글 작성은 아래(VPN 통과 후)에서 처리.
     if (body.action === 'today-status') {
       const ip = detectIp(req);
