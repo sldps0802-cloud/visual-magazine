@@ -809,6 +809,33 @@ Deno.serve(async (req) => {
       });
     }
 
+    // 비저너리 발언 피드: 사람별 집계(visionary-ranking)가 아니라 발언 한 건씩 최신순.
+    // 판정 전(pending)인 발언은 수익률을 아예 안 준다(null) -- 결과 없는 걸 0%나
+    // 빈칸 숫자로 보여주면 "이미 나온 결과"처럼 오해하기 쉬워서, 클라이언트가
+    // "판정 전"과 "수익률 0%"를 확실히 구분해서 그릴 수 있게 한다.
+    if (body.action === 'visionary-feed') {
+      const limit = Math.min(Number(body.limit) || 30, 100);
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL'),
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
+      );
+      const { data, error } = await supabaseAdmin.from('visionary_calls')
+        .select('influencer_name,statement,direction,status,price_at_call,price_at_judge,benchmark_return_pct,created_at')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (error) throw error;
+      const rows = (data || []).map((c) => ({
+        name: c.influencer_name,
+        statement: c.statement,
+        direction: c.direction,
+        status: c.status,
+        excessReturn: c.status === 'pending' ? null : callExcessReturn(c),
+      }));
+      return new Response(JSON.stringify({ rows }), {
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    }
+
     // visual-magazine-admin의 아이디 로그인용 이메일 조회. VPN 사용자도 정상적으로 로그인은
     // 할 수 있어야 하니 VPN 차단은 안 걸고(그건 댓글/좋아요 어뷰징용 게이트라 목적이 다름),
     // IP당 쿨다운만 건다 -- 이거 없이 anon에게 RPC를 직접 열어두면 아이디를 무작위로 시도해서

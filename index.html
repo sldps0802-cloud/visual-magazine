@@ -163,14 +163,17 @@
   .visionary-compact .panel-title{margin-bottom:4px;}
   .visionary-compact .panel-sub{margin-bottom:14px;}
   .vc-list{list-style:none;}
-  .vc-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--surface-border);font-size:13px;}
+  .vc-row{display:flex;align-items:baseline;gap:8px;padding:8px 0;border-bottom:1px solid var(--surface-border);font-size:13px;}
   .vc-row:last-child{border-bottom:none;}
-  .vc-rank{font-weight:800;color:var(--amber);width:16px;flex:none;}
-  .vc-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .vc-rate{font-weight:800;flex:none;font-size:13px;}
-  .vc-flag{font-size:11px;color:var(--text-muted);font-weight:400;}
+  .vc-statement{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .vc-statement b{font-weight:700;}
+  .vc-rate{font-weight:800;flex:none;font-size:12px;}
+  .vc-rate.pos{color:#7dd88a;}
+  .vc-rate.neg{color:var(--amber);}
+  .vc-pending{flex:none;font-size:11px;color:var(--text-muted);}
   .vc-note{font-size:11px;line-height:1.6;color:var(--text-muted);margin-top:14px;}
   .vc-note a{color:var(--amber);}
+  .vc-more{display:block;margin-top:12px;font-size:12px;font-weight:700;color:var(--amber);text-align:right;}
 
   .card-list{list-style:none;}
   .card-row{
@@ -242,7 +245,7 @@
       <a href="#">머니</a>
       <a href="#">커리어</a>
       <a href="#">칼럼</a>
-      <a href="#side-swap">비저너리</a>
+      <a href="visionary-feed.html">비저너리</a>
       <a href="today.html">오늘의 예측</a>
     </nav>
     <div class="navicons">
@@ -381,29 +384,34 @@
     el.className = 'reveal visionary-compact';
     el.innerHTML =
       '<div class="panel-title">비저너리</div>' +
-      '<div class="panel-sub">경제 유튜버 발언 승률 랭킹</div>' +
-      '<ul class="vc-list" id="vc-list"><li class="empty-note">아직 채점된 발언이 없어요.</li></ul>' +
-      '<p class="vc-note">부호뿐 아니라 벤치마크 대비 초과수익도 함께 봐요. 투자 조언 아님.</p>';
+      '<div class="panel-sub">경제 유튜버 발언 · 결과</div>' +
+      '<ul class="vc-list" id="vc-list"><li class="empty-note">아직 수집된 발언이 없어요.</li></ul>' +
+      '<a class="vc-more" href="visionary-feed.html">더 보기 →</a>';
 
     fetch(SUPABASE_URL + '/functions/v1/super-action', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY },
-      body: JSON.stringify({ action: 'visionary-ranking' })
+      body: JSON.stringify({ action: 'visionary-feed', limit: 3 })
     }).then(function(r){ return r.json(); }).then(function(result){
       renderVisionaryCompact(result.rows || []);
       checkReveal();
     }).catch(function(){});
   }
 
+  // 판정 전(pending)인 발언은 수익률을 아예 안 보여준다 -- 0%나 빈칸으로 두면
+  // "이미 결과 나온 수익률이 0%다"로 오해하기 쉬워서, "판정 전"이라고 확실히 표시한다.
   function renderVisionaryCompact(rows){
     if(rows.length === 0) return;
     var list = document.getElementById('vc-list');
     if(!list) return; // 그 사이 반대편(퀴즈)으로 다시 그려졌을 수 있음 -- 조용히 건너뜀
-    list.innerHTML = rows.slice(0, 5).map(function(r, i){
+    list.innerHTML = rows.slice(0, 3).map(function(r){
+      var rateHtml = r.excessReturn == null
+        ? '<span class="vc-pending">판정 전</span>'
+        : '<span class="vc-rate ' + (r.excessReturn >= 0 ? 'pos' : 'neg') + '">' +
+            (r.excessReturn >= 0 ? '+' : '') + r.excessReturn.toFixed(1) + '%</span>';
       return '<li class="vc-row">' +
-        '<span class="vc-rank">' + (i + 1) + '</span>' +
-        '<span class="vc-name">' + esc(r.name) + (r.lowSample ? ' <span class="vc-flag">·표본부족</span>' : '') + '</span>' +
-        '<span class="vc-rate">' + Math.round(r.winRate) + '%</span>' +
+        '<span class="vc-statement"><b>' + esc(r.name) + '</b> · ' + esc(r.statement) + '</span>' +
+        rateHtml +
       '</li>';
     }).join('');
   }
