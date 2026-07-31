@@ -114,6 +114,19 @@
   .vote-half:disabled{cursor:default;}
   .vote-half:disabled:not(.picked){opacity:.4;}
   .vote-half.picked{background:rgba(255,255,255,.18);}
+  /* 투표된 쪽에 "두근·움찔" 반응 -- 심장 박동처럼 두 번 튀었다 잦아들면서 살짝 흔들린다.
+     한 번만 재생되는 1회성 애니메이션(무한반복 아님)이라 클래스를 뗐다 다시 붙여야
+     (JS에서 강제 리플로우로) 다시 재생된다. */
+  @keyframes vote-heartbeat{
+    0%{transform:scale(1) rotate(0deg);filter:brightness(1);}
+    12%{transform:scale(1.12) rotate(-1.5deg);filter:brightness(1.25);}
+    26%{transform:scale(.96) rotate(1.5deg);filter:brightness(1);}
+    40%{transform:scale(1.07) rotate(-1deg);}
+    55%{transform:scale(.99) rotate(.5deg);}
+    70%{transform:scale(1.03) rotate(0deg);}
+    100%{transform:scale(1) rotate(0deg);filter:brightness(1);}
+  }
+  .vote-half.vote-pulse{animation:vote-heartbeat .8s ease-out;}
   .vote-counts{display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);}
   .vote-msg{font-size:12px;color:var(--amber);margin-top:10px;min-height:14px;}
 
@@ -149,16 +162,26 @@
     position:relative;z-index:1;font-size:23px;font-weight:800;text-align:center;
     letter-spacing:-.01em;
   }
-  .coin-gate-hint{
-    position:relative;z-index:1;font-size:16px;font-weight:800;letter-spacing:.02em;
-    opacity:.3;transition:opacity .12s ease-out,transform .12s ease-out;
+  /* margin-top으로 안내 팝업(coin-hint-bubble)이 코인 위에 뜰 자리를 미리 비워둔다 --
+     팝업은 position:absolute라 flex gap만으로는 자리가 안 잡혀서, 안 그러면 위 제목과
+     겹친다. */
+  .coin-slot{position:relative;z-index:1;margin-top:74px;display:flex;align-items:center;justify-content:center;}
+  /* 처음 들어왔을 때만 잠깐 뜨는 안내 팝업 -- 부드러운 반투명(frosted glass) 말풍선.
+     코인을 처음 잡는 순간(pointerdown) 조용히 사라진다. */
+  .coin-hint-bubble{
+    position:absolute;left:50%;bottom:100%;z-index:2;
+    transform:translateX(-50%) translateY(8px) scale(.92);
+    margin-bottom:16px;width:max-content;max-width:min(220px, 72vw);
+    background:rgba(255,255,255,.1);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+    border:1px solid rgba(255,255,255,.18);border-radius:14px;
+    padding:11px 16px;font-size:13px;line-height:1.5;color:var(--text);text-align:center;
+    box-shadow:0 8px 24px rgba(0,0,0,.25);
+    opacity:0;pointer-events:none;
+    transition:opacity .4s ease-out, transform .4s cubic-bezier(.34,1.56,.64,1);
   }
-  .coin-gate-hint.up{color:var(--up);}
-  .coin-gate-hint.down{color:var(--down);}
-  /* 던진 뒤(결과 화면을 보여주는 동안)엔 제목·힌트·안내문을 조용히 지운다 -- 결과만
-     또렷하게 보이게. */
+  .coin-hint-bubble.show{opacity:1;transform:translateX(-50%) translateY(0) scale(1);}
+  /* 던진 뒤(결과 화면을 보여주는 동안)엔 제목·안내문을 조용히 지운다 -- 결과만 또렷하게 보이게. */
   .coin-gate.launched .coin-gate-title,
-  .coin-gate.launched .coin-gate-hint,
   .coin-gate.launched .coin-gate-label{
     opacity:0;pointer-events:none;transition:opacity .25s ease-out;
   }
@@ -320,12 +343,13 @@
 <div class="coin-gate" id="coin-gate">
   <div class="coin-gate-glow" id="coin-gate-glow"></div>
   <div class="coin-gate-title">코스피 오른다 VS 내린다</div>
-  <div class="coin-gate-hint up" id="hint-up">▲ 긍정</div>
-  <div class="coin" id="coin">
-    <div class="coin-face coin-face-front">VC</div>
-    <div class="coin-face coin-face-back">₩</div>
+  <div class="coin-slot">
+    <div class="coin-hint-bubble" id="coin-hint-bubble">원하는 방향으로 동전을 잡고 던져보세요</div>
+    <div class="coin" id="coin">
+      <div class="coin-face coin-face-front">VC</div>
+      <div class="coin-face coin-face-back">₩</div>
+    </div>
   </div>
-  <div class="coin-gate-hint down" id="hint-down">▼ 부정</div>
   <p class="coin-gate-label" id="coin-gate-label">동전을 위로 던지면 긍정, 아래로 던지면 부정에 투표돼요</p>
 
   <div class="coin-result" id="coin-result">
@@ -494,6 +518,20 @@
     document.getElementById('vote-up').classList.toggle('picked', direction === 'up');
     document.getElementById('vote-down').classList.toggle('picked', direction === 'down');
     document.getElementById('vote-msg').textContent = '오늘 투표 완료! 내일 다시 투표할 수 있어요.';
+    playVotePulse(direction);
+  }
+
+  // 투표된 쪽에 두근·움찔 애니메이션을 (다시) 재생한다. 이미 재생된 적 있어도 클래스를
+  // 뗐다가 강제로 리플로우시킨 뒤 다시 붙이면 처음부터 다시 재생된다 -- 동전 게이트를
+  // 통해 투표했을 땐 이 함수가 화면에 카드가 가려진 채로 먼저 한 번 불리고, 3초 뒤
+  // 게이트가 사라지는 순간 showResult()가 또 한 번 불러서 "사용자가 실제로 보는 순간"에
+  // 반응이 눈에 보이게 한다.
+  function playVotePulse(direction){
+    var el = document.getElementById(direction === 'up' ? 'vote-up' : 'vote-down');
+    if(!el) return;
+    el.classList.remove('vote-pulse');
+    void el.offsetWidth;
+    el.classList.add('vote-pulse');
   }
 
   if(localStorage.getItem(votedKey)) lockVoteUI(localStorage.getItem(votedKey));
@@ -539,9 +577,8 @@
   (function(){
     var gate = document.getElementById('coin-gate');
     var coin = document.getElementById('coin');
-    var hintUp = document.getElementById('hint-up');
-    var hintDown = document.getElementById('hint-down');
     var glow = document.getElementById('coin-gate-glow');
+    var hintBubble = document.getElementById('coin-hint-bubble');
 
     // 오늘 이미 투표한 사람에게는 안 띄운다 -- votedKey는 위 투표 로직과 같은 키라 날짜가
     // 바뀌면(다음날) 자동으로 다시 보인다.
@@ -575,19 +612,23 @@
       var sign = dy < 0 ? -1 : 1, abs = Math.abs(dy);
       return sign * MAX_PULL * (1 - Math.exp(-abs / MAX_PULL));
     }
-    function setHints(dir, progress){
-      hintUp.style.opacity = dir === 'up' ? (0.3 + progress * 0.7) : 0.3;
-      hintUp.style.transform = dir === 'up' ? 'scale(' + (1 + progress * 0.2) + ')' : 'scale(1)';
-      hintDown.style.opacity = dir === 'down' ? (0.3 + progress * 0.7) : 0.3;
-      hintDown.style.transform = dir === 'down' ? 'scale(' + (1 + progress * 0.2) + ')' : 'scale(1)';
+    // 위/아래 화살표 힌트는 없앴지만, 당기는 방향으로 배경 빛이 살짝 밝아지는 반응은
+    // 남겨둔다 -- 화살표 없이도 어느 쪽으로 당기고 있는지 은은하게 느껴지게.
+    function setDragGlow(dir, progress){
       glow.style.setProperty('--drag-up', dir === 'up' ? (progress * 0.35).toFixed(2) : 0);
       glow.style.setProperty('--drag-down', dir === 'down' ? (progress * 0.35).toFixed(2) : 0);
     }
-    function resetHints(){
-      hintUp.style.opacity = ''; hintUp.style.transform = '';
-      hintDown.style.opacity = ''; hintDown.style.transform = '';
+    function resetDragGlow(){
       glow.style.setProperty('--drag-up', 0);
       glow.style.setProperty('--drag-down', 0);
+    }
+    // 처음 들어왔을 때만 살짝 텀을 두고 안내 팝업을 띄우고, 코인을 처음 잡는 순간 조용히 치운다.
+    var hintBubbleDismissed = false;
+    setTimeout(function(){ if(!launched) hintBubble.classList.add('show'); }, 500);
+    function dismissHintBubble(){
+      if(hintBubbleDismissed) return;
+      hintBubbleDismissed = true;
+      hintBubble.classList.remove('show');
     }
     // 놓는 순간 손가락의 실제 속도(px/s) -- 최근 몇 프레임의 이동량/시간으로 추정.
     function releaseVelocity(){
@@ -632,6 +673,7 @@
 
     function onPointerDown(e){
       if(launched) return;
+      dismissHintBubble();
       gsap.killTweensOf(coin); // 튕기는/도는 도중이어도 즉시 잡을 수 있게(interrupt) -- 끝나길 기다리지 않는다
       dragging = true;
       startY = e.clientY - (gsap.getProperty(coin, 'y') || 0); // 현재 위치 기준 오프셋 -- 다시 잡을 때 점프 없음
@@ -659,7 +701,7 @@
       moveHistory.push({ t: performance.now(), y: e.clientY });
       if(moveHistory.length > 6) moveHistory.shift();
 
-      setHints(dir, progress);
+      setDragGlow(dir, progress);
 
       var tickIndex = Math.floor(Math.abs(pulled) / TICK_STEP);
       if(tickIndex > lastTickIndex){
@@ -677,7 +719,7 @@
       dragging = false;
       if(launched) return;
       coin.classList.remove('dragging');
-      resetHints();
+      resetDragGlow();
       // 임계값을 못 넘기고 놓으면 원위치로 튕겨 돌아온다 -- GSAP의 elastic 이징이 진짜
       // 스프링처럼 자연스럽게 오버슈트했다 잦아든다("쫀득"). 세게 당기다 놓았을수록
       // (releaseVelocity가 클수록) 조금 더 크고 길게 튕기도록 지속시간을 살짝 늘린다.
@@ -700,7 +742,7 @@
       coin.classList.remove('dragging');
       gate.classList.add('launched'); // 힌트·안내문 지우고 결과만 또렷하게
       vibrate([14, 30, 14]);
-      resetHints();
+      resetDragGlow();
       gsap.killTweensOf(coin);
 
       var sign = dir === 'up' ? -1 : 1;
@@ -746,6 +788,9 @@
 
       setTimeout(function(){
         gate.classList.add('leaving'); // 기존 카드 화면으로 부드럽게 페이드
+        // 투표 자체는 진작(launch 시점) 처리됐지만, 그건 이 게이트에 가려진 채였다 --
+        // 실제로 카드가 눈에 보이는 지금 이 순간에 맞춰 두근·움찔 반응을 다시 재생한다.
+        playVotePulse(dir);
         setTimeout(function(){ gate.remove(); }, 500);
       }, 3000);
     }
