@@ -517,6 +517,9 @@ function wcParseXml(xmlText) {
       description: String(it.description ?? it.summary ?? '').trim(),
       // 구글 뉴스처럼 여러 언론사를 한 피드로 묶어 보여주는 소스는 <source> 태그에 실제 언론사명이 들어있음
       source: typeof it.source === 'string' ? it.source : (it.source?.['#text'] || ''),
+      // world-coverage(날짜 안 씀)에서 만든 원래 파서엔 없던 필드 -- 타임라인이 날짜를 RSS
+      // 원본에서 그대로 가져오려면 필요해서 추가. RSS는 pubDate, Atom은 published/updated.
+      pubDate: String(it.pubDate ?? it.published ?? it.updated ?? '').trim(),
     }));
   } catch {
     return [];
