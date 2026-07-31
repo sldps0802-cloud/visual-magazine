@@ -916,11 +916,15 @@ Deno.serve(async (req) => {
         });
       }
       const statementDate = kstDateStr();
-      let checked = 0, inserted = 0;
-      for (const ch of VISIONARY_CHANNELS) {
+      // 채널 19개를 순서대로(for await) 돌리면 채널당 몇 초씩만 걸려도 합이 150초
+      // 유휴 타임아웃을 넘긴다(실측: 504 IDLE_TIMEOUT). 채널 간에는 서로 의존관계가
+      // 없으니 Promise.all로 동시에 돌려서 총 시간을 "가장 느린 채널 하나" 수준으로
+      // 줄인다 -- 채널 안의 영상 2~3개는 그대로 순서대로(LLM 요청 폭주 방지).
+      const results = await Promise.all(VISIONARY_CHANNELS.map(async (ch) => {
+        let channelChecked = 0, channelInserted = 0;
         const videos = await fetchChannelVideos(ch.channelId, 3);
         for (const v of videos) {
-          checked++;
+          channelChecked++;
           const cls = await classifyVideo(v.title, v.description);
           if (!cls) continue;
 
@@ -949,9 +953,12 @@ Deno.serve(async (req) => {
           };
           // video_id unique 제약 위반(23505)이면 이미 처리된 영상이라는 뜻 -- 정상, 그냥 건너뜀.
           const { error } = await supabaseAdmin.from('visionary_calls').insert(row);
-          if (!error) inserted++;
+          if (!error) channelInserted++;
         }
-      }
+        return { checked: channelChecked, inserted: channelInserted };
+      }));
+      const checked = results.reduce((sum, r) => sum + r.checked, 0);
+      const inserted = results.reduce((sum, r) => sum + r.inserted, 0);
       return new Response(JSON.stringify({ ok: true, checked, inserted }), {
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
       });
@@ -973,15 +980,19 @@ Deno.serve(async (req) => {
         .eq('status', 'pending').lte('judge_date', today);
       if (rowsError) throw rowsError;
 
-      const benchmarkCache = {};
-      let judged = 0;
-      for (const row of rows || []) {
+      // 판정 대상이 많아지면(19개 채널로 늘어난 뒤) 순서대로 돌리다 150초 유휴
+      // 타임아웃을 넘길 수 있다(visionary-collect와 같은 문제) -- 벤치마크는 미리
+      // 한 번에 받아 캐시해두고(중복 조회 방지), 행별 판정은 Promise.all로 동시에.
+      const uniqueBenchmarks = [...new Set((rows || []).map((r) => r.benchmark_ticker || '^KS11'))];
+      const benchmarkEntries = await Promise.all(uniqueBenchmarks.map(async (bt) => [bt, await yfQuote(bt)]));
+      const benchmarkCache = Object.fromEntries(benchmarkEntries);
+
+      const results = await Promise.all((rows || []).map(async (row) => {
         const q = await yfQuote(row.ticker);
-        if (!q || row.price_at_call == null) continue;
+        if (!q || row.price_at_call == null) return false;
         const bt = row.benchmark_ticker || '^KS11';
-        if (!(bt in benchmarkCache)) benchmarkCache[bt] = await yfQuote(bt);
         const bq = benchmarkCache[bt];
-        if (!bq || row.benchmark_price_at_call == null) continue;
+        if (!bq || row.benchmark_price_at_call == null) return false;
 
         const assetReturn = (q.price - row.price_at_call) / row.price_at_call * 100;
         const hit = row.direction === 'up' ? assetReturn > 0 : assetReturn < 0;
@@ -992,8 +1003,9 @@ Deno.serve(async (req) => {
           benchmark_return_pct: benchmarkReturn,
           status: hit ? 'hit' : 'miss',
         }).eq('id', row.id);
-        if (!updErr) judged++;
-      }
+        return !updErr;
+      }));
+      const judged = results.filter(Boolean).length;
       return new Response(JSON.stringify({ ok: true, judged }), {
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
       });
