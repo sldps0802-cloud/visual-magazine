@@ -145,69 +145,79 @@
     background:radial-gradient(circle, var(--down) 0%, color-mix(in srgb, var(--down) 45%, transparent) 45%, transparent 75%);
     opacity:calc(var(--down-glow) + var(--drag-down, 0));
   }
+  .coin-gate-title{
+    position:relative;z-index:1;font-size:23px;font-weight:800;text-align:center;
+    letter-spacing:-.01em;
+  }
   .coin-gate-hint{
-    position:relative;z-index:1;font-size:13px;font-weight:800;letter-spacing:.02em;
+    position:relative;z-index:1;font-size:16px;font-weight:800;letter-spacing:.02em;
     opacity:.3;transition:opacity .12s ease-out,transform .12s ease-out;
   }
   .coin-gate-hint.up{color:var(--up);}
   .coin-gate-hint.down{color:var(--down);}
-  /* 던진 뒤(결과 화면을 보여주는 동안)엔 힌트·안내문·건너뛰기를 조용히 지운다 --
-     결과만 또렷하게 보이게. */
+  /* 던진 뒤(결과 화면을 보여주는 동안)엔 제목·힌트·안내문을 조용히 지운다 -- 결과만
+     또렷하게 보이게. */
+  .coin-gate.launched .coin-gate-title,
   .coin-gate.launched .coin-gate-hint,
-  .coin-gate.launched .coin-gate-label,
-  .coin-gate.launched .coin-gate-skip{
+  .coin-gate.launched .coin-gate-label{
     opacity:0;pointer-events:none;transition:opacity .25s ease-out;
   }
   /* transform은 GSAP이 관리한다(CSS transition 없음) -- 드래그 중엔 gsap.set()으로 손가락에
      1:1로 붙이고, 놓는 순간엔 gsap.to()의 elastic/back 이징으로 놓는 속도를 이어받아 튕겨
      돌아오거나 날아간다. 앞/뒤 두 면(coin-face)을 따로 둔 건 rotateY로 실제로 "돌 때" 앞면이
      얇아지다 사라지고 뒷면이 나타나는 진짜 동전 뒤집힘처럼 보이게 하기 위해서다 -- 면이
-     하나뿐이면 옆모습에서 그냥 얇아지기만 해서 "돈다"는 게 잘 안 느껴진다. */
+     하나뿐이면 옆모습에서 그냥 얇아지기만 해서 "돈다"는 게 잘 안 느껴진다. 초반엔 똑바로
+     서 있다가(rotation:0), 던지는 순간에만 GSAP이 대각선 기울기를 걸어준다 -- 가만히
+     있을 때부터 삐딱하면 어색해서, 실제로 회전하는 동안에만 대각선으로 보이게 했다. */
   .coin{
     position:relative;z-index:1;
-    width:150px;height:150px;
+    width:150px;height:150px;border-radius:50%;
     cursor:grab;user-select:none;touch-action:none;
     transform-style:preserve-3d;will-change:transform;
+    /* 널링(edge knurling) -- 진짜 동전 옆면의 톱니 무늬. 이 위에 얼굴(coin-face)이
+       살짝 작게 얹혀서 테두리에 톱니 무늬 링만 보이게 된다. */
+    background:repeating-conic-gradient(from 0deg, rgba(255,255,255,.24) 0deg 2.2deg, rgba(0,0,0,.32) 2.2deg 4.4deg);
+    box-shadow:0 16px 34px rgba(0,0,0,.5), inset 0 0 0 1px rgba(0,0,0,.35);
   }
   .coin.dragging{cursor:grabbing;}
-  /* 매트한 회색 금속 동전: 광택 대신 은은한 방사형 하이라이트 + 3단 선형 그라데이션(밝은
-     회색→중간→어두운 회색)으로 볼록한 입체감을 낸다. inset 그림자 두 겹이 위쪽은 밝게,
-     아래쪽은 어둡게 눌러서 도드라진 곡면처럼 보이게 하는 핵심이다. */
+  /* 매트한 회색 금속 동전 얼굴: 광택 대신 은은한 방사형 하이라이트(밝은 쪽/어두운 쪽 두
+     군데) + 3단 선형 그라데이션으로 볼록한 곡면 입체감을 내고, inset 라인 두 겹으로
+     "각인된 안쪽 테두리"를 그려서 진짜 주화 도안처럼 보이게 한다. */
   .coin-face{
-    position:absolute;inset:0;border-radius:50%;
+    position:absolute;inset:9px;border-radius:50%;
     display:flex;align-items:center;justify-content:center;
     backface-visibility:hidden;-webkit-backface-visibility:hidden;
-    color:#f2f3f5;font-weight:800;letter-spacing:.02em;
-    text-shadow:0 1px 2px rgba(0,0,0,.45), 0 -1px 0 rgba(255,255,255,.12);
+    color:#eef0f2;font-weight:800;letter-spacing:.02em;
+    text-shadow:0 1px 2px rgba(0,0,0,.5), 0 -1px 0 rgba(255,255,255,.12);
     box-shadow:
-      0 12px 28px rgba(0,0,0,.45),
-      inset 0 2px 3px rgba(255,255,255,.2),
-      inset 0 -8px 14px rgba(0,0,0,.4),
-      inset 0 0 0 4px rgba(0,0,0,.12);
+      0 2px 5px rgba(0,0,0,.3),
+      inset 0 2px 4px rgba(255,255,255,.22),
+      inset 0 -10px 18px rgba(0,0,0,.42),
+      inset 0 0 0 2px rgba(0,0,0,.22),
+      inset 0 0 0 6px rgba(255,255,255,.07),
+      inset 0 0 0 7px rgba(0,0,0,.12);
   }
   .coin-face-front{
-    font-size:34px;
+    font-size:42px;
     background:
-      radial-gradient(circle at 30% 25%, rgba(255,255,255,.18), transparent 55%),
-      linear-gradient(150deg, #a4a9b2 0%, #6b7078 55%, #4b4f57 100%);
+      radial-gradient(circle at 30% 24%, rgba(255,255,255,.24), transparent 52%),
+      radial-gradient(circle at 78% 82%, rgba(0,0,0,.2), transparent 55%),
+      linear-gradient(150deg, #aeb3bc 0%, #767b83 55%, #4d5158 100%);
   }
   .coin-face-back{
-    font-size:30px;
+    font-size:38px;
     background:
-      radial-gradient(circle at 70% 75%, rgba(255,255,255,.14), transparent 55%),
-      linear-gradient(150deg, #8f949d 0%, #5b606a 55%, #3d4046 100%);
+      radial-gradient(circle at 70% 75%, rgba(255,255,255,.18), transparent 52%),
+      radial-gradient(circle at 25% 20%, rgba(0,0,0,.18), transparent 55%),
+      linear-gradient(150deg, #999ea7 0%, #63676f 55%, #3d4046 100%);
     transform:rotateY(180deg);
   }
   .coin.tick{animation:coin-tick .1s ease-out;}
   @keyframes coin-tick{ 0%{filter:brightness(1);} 40%{filter:brightness(1.3);} 100%{filter:brightness(1);} }
   .coin-spark{position:fixed;z-index:101;border-radius:50%;pointer-events:none;}
-  .coin-gate-label{position:relative;z-index:1;font-size:12px;color:var(--text-muted);text-align:center;max-width:230px;line-height:1.6;}
-  .coin-gate-skip{
-    position:relative;z-index:1;font-size:12px;color:var(--text-muted);text-decoration:underline;
-    cursor:pointer;background:none;border:none;font-family:inherit;padding:4px;
-  }
+  .coin-gate-label{position:relative;z-index:1;font-size:15px;color:var(--text-muted);text-align:center;max-width:260px;line-height:1.6;}
   /* 던지고 나면(투표 확정) 코인 자리에 결과를 잠깐 보여주고 -- "내가 어디에 투표했는지"
-     말이 아니라 잠깐의 화면으로 확인시켜준 다음, 1.5초 뒤 원래 페이지로 매끄럽게 넘어간다. */
+     말이 아니라 잠깐의 화면으로 확인시켜준 다음, 3초 뒤 원래 페이지로 매끄럽게 넘어간다. */
   .coin-result{
     position:absolute;inset:0;z-index:2;
     display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
@@ -215,8 +225,8 @@
   }
   .coin-result.show{opacity:1;}
   .coin-result-badge{
-    width:88px;height:88px;border-radius:50%;
-    display:flex;align-items:center;justify-content:center;font-size:38px;
+    width:96px;height:96px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;font-size:42px;
     box-shadow:0 10px 30px rgba(0,0,0,.35);
     transform:scale(.4);opacity:0;
     transition:transform .5s cubic-bezier(.34,1.56,.64,1), opacity .3s ease-out;
@@ -224,7 +234,7 @@
   .coin-result.show .coin-result-badge{transform:scale(1);opacity:1;}
   .coin-result-badge.up{background:linear-gradient(135deg, var(--up), color-mix(in srgb, var(--up) 55%, #fff));}
   .coin-result-badge.down{background:linear-gradient(135deg, var(--down), color-mix(in srgb, var(--down) 55%, #fff));}
-  .coin-result-text{font-size:16px;font-weight:800;opacity:0;transition:opacity .3s ease-out .1s;}
+  .coin-result-text{font-size:19px;font-weight:800;opacity:0;transition:opacity .3s ease-out .1s;}
   .coin-result.show .coin-result-text{opacity:1;}
 
   .panel-title{font-size:17px;font-weight:800;margin-bottom:4px;}
@@ -309,14 +319,14 @@
 
 <div class="coin-gate" id="coin-gate">
   <div class="coin-gate-glow" id="coin-gate-glow"></div>
+  <div class="coin-gate-title">코스피 오른다 VS 내린다</div>
   <div class="coin-gate-hint up" id="hint-up">▲ 긍정</div>
   <div class="coin" id="coin">
     <div class="coin-face coin-face-front">VC</div>
     <div class="coin-face coin-face-back">₩</div>
   </div>
   <div class="coin-gate-hint down" id="hint-down">▼ 부정</div>
-  <p class="coin-gate-label" id="coin-gate-label">동전을 위로 끌어 던지면 긍정, 아래로 내리면 부정에 투표돼요</p>
-  <button class="coin-gate-skip" id="coin-gate-skip" type="button">나중에 · 그냥 둘러보기</button>
+  <p class="coin-gate-label" id="coin-gate-label">동전을 위로 던지면 긍정, 아래로 던지면 부정에 투표돼요</p>
 
   <div class="coin-result" id="coin-result">
     <div class="coin-result-badge" id="coin-result-badge"></div>
@@ -532,12 +542,10 @@
     var hintUp = document.getElementById('hint-up');
     var hintDown = document.getElementById('hint-down');
     var glow = document.getElementById('coin-gate-glow');
-    var skipBtn = document.getElementById('coin-gate-skip');
 
     // 오늘 이미 투표한 사람에게는 안 띄운다 -- votedKey는 위 투표 로직과 같은 키라 날짜가
-    // 바뀌면(다음날) 자동으로 다시 보인다. 이번 방문에서 "그냥 둘러보기"로 건너뛴 적
-    // 있어도(투표는 안 했지만) 이 세션 동안은 다시 안 띄운다.
-    if(localStorage.getItem(votedKey) || sessionStorage.getItem('coin_gate_skipped')){
+    // 바뀌면(다음날) 자동으로 다시 보인다.
+    if(localStorage.getItem(votedKey)){
       gate.remove();
       return;
     }
@@ -546,6 +554,7 @@
     var THRESHOLD = 92;   // 이 이상 끌면 발사 확정
     var MAX_PULL = 150;   // 고무줄 저항 한계 -- 끌수록 점점 덜 따라온다
     var TICK_STEP = 16;   // 이 간격마다 "드르륵" 틱(진동 + 반짝임)
+    var TILT_Z = 26;      // 던질 때만 거는 대각선 기울기(Z축) -- 아래 launch() 참고
     var reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     var dragging = false, launched = false;
@@ -553,14 +562,10 @@
     var moveHistory = [];   // 최근 pointermove 몇 개(t, y) -- 놓는 순간 속도 계산용
 
     // 코인 자신에게 소실점(perspective)을 둔다 -- 화면 위/아래로 멀리 이동해도 뒤집히는
-    // 축이 코인을 중심으로 유지돼서 "제자리에서 도는" 느낌이 흐트러지지 않는다.
-    // rotation(Z축)을 고정으로 살짝 걸어두면 rotationY 회전축 자체가 화면에서 대각선으로
-    // 보인다 -- 순수 rotationY만 돌리면 세로로 곧게 선 축을 중심으로 도는 것처럼 보이는데,
-    // 실측해보면 Z축 기울기 + Y축 회전을 같이 주면 가로쪽에 가깝게 대각선으로 얇아지며
-    // 도는 모습이 된다. 한 번만 걸어두면 이후 y/rotationX 등을 부분적으로 gsap.set해도
-    // GSAP이 이 값을 계속 들고 있어서 매번 다시 넘길 필요가 없다.
-    var TILT_Z = 26;
-    gsap.set(coin, { transformPerspective: 600, rotation: TILT_Z });
+    // 축이 코인을 중심으로 유지돼서 "제자리에서 도는" 느낌이 흐트러지지 않는다. rotation
+    // (Z축)은 여기서 걸지 않는다 -- 가만히 있을 때부터 삐딱하면 어색하니, 처음엔 똑바로
+    // 서 있다가 던지는 순간(launch)에만 짧게 기울인다.
+    gsap.set(coin, { transformPerspective: 600 });
 
     function vibrate(pattern){
       try{ if(navigator.vibrate) navigator.vibrate(pattern); }catch(e){}
@@ -713,7 +718,10 @@
       // 분명히 느껴지게 한다. 둘 다 같은 easeOut을 쓰면 회전도 초반에 몰렸다 뚝
       // 멈추는 것처럼 보여서 오히려 다 돈 것처럼 안 느껴진다.
       var tl = gsap.timeline({ onComplete: function(){ showResult(dir); } });
-      tl.to(coin, { y: currentY + sign * TRAVEL, duration: FLY, ease: 'power1.inOut' }, 0)
+      // 던지는 순간에만 짧게(전체 시간의 20% 안쪽) 대각선으로 기울인다 -- 그 뒤로도 값은
+      // 유지되니 나머지 구간 내내 대각선-가로 방향으로 도는 것처럼 보인다.
+      tl.to(coin, { rotation: TILT_Z, duration: Math.min(FLY * 0.2, 0.18), ease: 'power2.out' }, 0)
+          .to(coin, { y: currentY + sign * TRAVEL, duration: FLY, ease: 'power1.inOut' }, 0)
           .to(coin, { rotationY: sign * 360 * SPIN_TURNS, duration: FLY, ease: 'none' }, 0)
           .to(coin, { scaleX: 1, scaleY: 1, duration: FLY * 0.25, ease: 'power1.out' }, 0)
           // 회전을 충분히 보여준 다음(후반 35%)에야 서서히 사라진다 -- 그래야 "돌았다"는
@@ -747,11 +755,6 @@
     coin.addEventListener('pointerup', onPointerUp);
     coin.addEventListener('pointercancel', onPointerUp);
 
-    skipBtn.addEventListener('click', function(){
-      sessionStorage.setItem('coin_gate_skipped', '1');
-      gate.classList.add('leaving');
-      setTimeout(function(){ gate.remove(); }, 500);
-    });
   })();
 
   /* ---- 댓글: post.html과 동일한 랜덤 정체성·모더레이션 흐름 ---- */
