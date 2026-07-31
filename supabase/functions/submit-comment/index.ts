@@ -623,7 +623,7 @@ async function callCloudflare(prompt, opts) {
   if (!accountId || !token) return null;
   return callOpenAiChat(
     `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1/chat/completions`,
-    token, '@cf/meta/llama-3.1-8b-instruct', prompt, opts,
+    token, '@cf/meta/llama-3.3-70b-instruct-fp8-fast', prompt, opts,
   );
 }
 async function callTimelineLLM(prompt, opts = {}) {
