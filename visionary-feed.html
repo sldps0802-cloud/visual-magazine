@@ -122,7 +122,7 @@
      투표되고, 아래로 끌면 떨어지며 부정에 투표된다. 임계값을 못 넘기고 놓으면 원위치로
      튕겨 돌아온다. 이미 오늘 투표했으면(위 투표 로직과 같은 votedKey) 아예 안 뜬다. ---- */
   .coin-gate{
-    position:fixed;inset:0;z-index:100;perspective:1000px;
+    position:fixed;inset:0;z-index:100;
     display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;
     background:
       radial-gradient(ellipse 900px 550px at 50% 0%, color-mix(in srgb, var(--gold) 24%, transparent), transparent 70%),
@@ -158,20 +158,46 @@
   .coin-gate.launched .coin-gate-skip{
     opacity:0;pointer-events:none;transition:opacity .25s ease-out;
   }
-  /* transform은 CSS transition이 아니라 JS(rAF 스프링 물리)가 매 프레임 직접 갱신한다 --
-     CSS transition과 JS가 같은 속성을 동시에 건드리면 서로 다른 타이밍 곡선이 충돌해서
-     뚝뚝 끊기는 느낌이 난다. 대신 놓는 순간의 속도를 스프링이 그대로 이어받아서
-     "튕겨 돌아오는" 느낌이 훨씬 쫀득해진다. */
+  /* transform은 GSAP이 관리한다(CSS transition 없음) -- 드래그 중엔 gsap.set()으로 손가락에
+     1:1로 붙이고, 놓는 순간엔 gsap.to()의 elastic/back 이징으로 놓는 속도를 이어받아 튕겨
+     돌아오거나 날아간다. 앞/뒤 두 면(coin-face)을 따로 둔 건 rotateY로 실제로 "돌 때" 앞면이
+     얇아지다 사라지고 뒷면이 나타나는 진짜 동전 뒤집힘처럼 보이게 하기 위해서다 -- 면이
+     하나뿐이면 옆모습에서 그냥 얇아지기만 해서 "돈다"는 게 잘 안 느껴진다. */
   .coin{
     position:relative;z-index:1;
-    width:104px;height:104px;border-radius:50%;
-    display:flex;align-items:center;justify-content:center;font-size:44px;
-    background:linear-gradient(135deg, var(--gold), var(--amber));
-    box-shadow:0 10px 34px rgba(0,0,0,.4), inset 0 2px 8px rgba(255,255,255,.45);
+    width:150px;height:150px;
     cursor:grab;user-select:none;touch-action:none;
-    transform-style:preserve-3d;backface-visibility:hidden;will-change:transform;
+    transform-style:preserve-3d;will-change:transform;
   }
   .coin.dragging{cursor:grabbing;}
+  /* 매트한 회색 금속 동전: 광택 대신 은은한 방사형 하이라이트 + 3단 선형 그라데이션(밝은
+     회색→중간→어두운 회색)으로 볼록한 입체감을 낸다. inset 그림자 두 겹이 위쪽은 밝게,
+     아래쪽은 어둡게 눌러서 도드라진 곡면처럼 보이게 하는 핵심이다. */
+  .coin-face{
+    position:absolute;inset:0;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    backface-visibility:hidden;-webkit-backface-visibility:hidden;
+    color:#f2f3f5;font-weight:800;letter-spacing:.02em;
+    text-shadow:0 1px 2px rgba(0,0,0,.45), 0 -1px 0 rgba(255,255,255,.12);
+    box-shadow:
+      0 12px 28px rgba(0,0,0,.45),
+      inset 0 2px 3px rgba(255,255,255,.2),
+      inset 0 -8px 14px rgba(0,0,0,.4),
+      inset 0 0 0 4px rgba(0,0,0,.12);
+  }
+  .coin-face-front{
+    font-size:34px;
+    background:
+      radial-gradient(circle at 30% 25%, rgba(255,255,255,.18), transparent 55%),
+      linear-gradient(150deg, #a4a9b2 0%, #6b7078 55%, #4b4f57 100%);
+  }
+  .coin-face-back{
+    font-size:30px;
+    background:
+      radial-gradient(circle at 70% 75%, rgba(255,255,255,.14), transparent 55%),
+      linear-gradient(150deg, #8f949d 0%, #5b606a 55%, #3d4046 100%);
+    transform:rotateY(180deg);
+  }
   .coin.tick{animation:coin-tick .1s ease-out;}
   @keyframes coin-tick{ 0%{filter:brightness(1);} 40%{filter:brightness(1.3);} 100%{filter:brightness(1);} }
   .coin-spark{position:fixed;z-index:101;border-radius:50%;pointer-events:none;}
@@ -284,7 +310,10 @@
 <div class="coin-gate" id="coin-gate">
   <div class="coin-gate-glow" id="coin-gate-glow"></div>
   <div class="coin-gate-hint up" id="hint-up">▲ 긍정</div>
-  <div class="coin" id="coin">🪙</div>
+  <div class="coin" id="coin">
+    <div class="coin-face coin-face-front">VC</div>
+    <div class="coin-face coin-face-back">₩</div>
+  </div>
   <div class="coin-gate-hint down" id="hint-down">▼ 부정</div>
   <p class="coin-gate-label" id="coin-gate-label">동전을 위로 끌어 던지면 긍정, 아래로 내리면 부정에 투표돼요</p>
   <button class="coin-gate-skip" id="coin-gate-skip" type="button">나중에 · 그냥 둘러보기</button>
@@ -379,6 +408,7 @@
 </main>
 
 <script src="vendor/supabase.min.js"></script>
+<script src="vendor/gsap.min.js"></script>
 <script src="supabase-config.js"></script>
 <script>
   var SUN = '<circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="4" y1="12" x2="2" y2="12"/><line x1="22" y1="12" x2="20" y2="12"/><line x1="19.07" y1="4.93" x2="17.66" y2="6.34"/><line x1="6.34" y1="17.66" x2="4.93" y2="19.07"/><line x1="19.07" y1="19.07" x2="17.66" y2="17.66"/><line x1="6.34" y1="6.34" x2="4.93" y2="4.93"/>';
@@ -490,11 +520,12 @@
 
   loadStatus();
 
-  /* ---- 동전 던지기 투표 게이트: 토스식 "3D로 통통 튀는 동전" 모션 참고.
-     transform은 CSS transition이 아니라 매 프레임 JS(rAF)가 직접 계산해서 그린다 --
-     그래야 손을 놓는 순간의 속도를 스프링이 그대로 이어받아서(velocity handoff)
-     "튕겨 돌아오는" 느낌이 고정된 CSS 곡선보다 훨씬 쫀득해지고, 애니메이션 도중에
-     다시 잡아도(interrupt) 현재 위치에서 자연스럽게 이어진다. ---- */
+  /* ---- 동전 던지기 투표 게이트: GSAP 기반 마이크로 인터랙션.
+     드래그 중엔 gsap.set()으로 손가락에 1:1로 붙이고(direct manipulation), 놓는 순간엔
+     gsap.to()의 elastic 이징이 "놓는 속도"를 반영해 튕겨 돌아오거나(스냅백) 날아간다
+     (velocity handoff). 애니메이션 도중에 다시 잡아도 gsap.killTweensOf()가 현재
+     값에서 바로 이어받아서(interruptible) 뚝뚝 끊기지 않는다. 앞/뒤 두 면을 따로 둔
+     coin-face + rotateY로 실제 동전 뒤집힘처럼 도는 게 눈에 분명히 보이게 했다. ---- */
   (function(){
     var gate = document.getElementById('coin-gate');
     var coin = document.getElementById('coin');
@@ -510,6 +541,7 @@
       gate.remove();
       return;
     }
+    if(typeof gsap === 'undefined'){ gate.remove(); return; } // vendor/gsap.min.js 로드 실패 시 조용히 건너뜀
 
     var THRESHOLD = 92;   // 이 이상 끌면 발사 확정
     var MAX_PULL = 150;   // 고무줄 저항 한계 -- 끌수록 점점 덜 따라온다
@@ -518,9 +550,17 @@
 
     var dragging = false, launched = false;
     var startY = 0, lastTickIndex = 0;
-    var posY = 0;           // 코인의 "현재" translateY -- 드래그와 스프링이 공유하는 진짜값(presentation value)
     var moveHistory = [];   // 최근 pointermove 몇 개(t, y) -- 놓는 순간 속도 계산용
-    var springHandle = null;
+
+    // 코인 자신에게 소실점(perspective)을 둔다 -- 화면 위/아래로 멀리 이동해도 뒤집히는
+    // 축이 코인을 중심으로 유지돼서 "제자리에서 도는" 느낌이 흐트러지지 않는다.
+    // rotation(Z축)을 고정으로 살짝 걸어두면 rotationY 회전축 자체가 화면에서 대각선으로
+    // 보인다 -- 순수 rotationY만 돌리면 세로로 곧게 선 축을 중심으로 도는 것처럼 보이는데,
+    // 실측해보면 Z축 기울기 + Y축 회전을 같이 주면 가로쪽에 가깝게 대각선으로 얇아지며
+    // 도는 모습이 된다. 한 번만 걸어두면 이후 y/rotationX 등을 부분적으로 gsap.set해도
+    // GSAP이 이 값을 계속 들고 있어서 매번 다시 넘길 필요가 없다.
+    var TILT_Z = 26;
+    gsap.set(coin, { transformPerspective: 600, rotation: TILT_Z });
 
     function vibrate(pattern){
       try{ if(navigator.vibrate) navigator.vibrate(pattern); }catch(e){}
@@ -529,21 +569,6 @@
     function rubberband(dy){
       var sign = dy < 0 ? -1 : 1, abs = Math.abs(dy);
       return sign * MAX_PULL * (1 - Math.exp(-abs / MAX_PULL));
-    }
-    // 드래그 중/발사 중 공통으로 쓰는 3D 변형: 당기는(또는 날아가는) 방향으로 살짝
-    // 기울고(rotateX) 늘어나는(stretch) 고무줄 텐션 + 회전(spin, rotateY)을 합친다.
-    function paintCoin(y, opts){
-      opts = opts || {};
-      var progress = Math.min(Math.abs(y) / THRESHOLD, 1);
-      var tilt = (y < 0 ? 1 : -1) * progress * (opts.tilt == null ? 20 : opts.tilt);
-      var stretch = 1 + progress * (opts.stretch == null ? 0.14 : opts.stretch);
-      var squeeze = 1 - progress * (opts.squeeze == null ? 0.08 : opts.squeeze);
-      var spin = opts.spin || 0;
-      coin.style.transform =
-        'translateY(' + y + 'px) rotateX(' + tilt + 'deg)' +
-        (spin ? ' rotateY(' + spin + 'deg)' : '') +
-        ' scale(' + squeeze + ',' + stretch + ')';
-      if(opts.opacity != null) coin.style.opacity = String(opts.opacity);
     }
     function setHints(dir, progress){
       hintUp.style.opacity = dir === 'up' ? (0.3 + progress * 0.7) : 0.3;
@@ -558,42 +583,6 @@
       hintDown.style.opacity = ''; hintDown.style.transform = '';
       glow.style.setProperty('--drag-up', 0);
       glow.style.setProperty('--drag-down', 0);
-    }
-    function cancelSpring(){
-      if(springHandle){ cancelAnimationFrame(springHandle); springHandle = null; }
-    }
-    // 임계값을 못 넘기고 놓았을 때: 실제 스프링 물리(질량-감쇠-강성)로 원위치까지 계산한다.
-    // 놓는 순간의 속도(velocity)를 초기값으로 그대로 넘겨받아서, 세게 당기다 놓으면
-    // 더 크게 튕기고 살살 놓으면 살짝만 흔들리며 돌아온다 -- 고정 시간의 CSS transition으로는
-    // 못 내는 느낌이다.
-    function springBack(initialVelocity){
-      cancelSpring();
-      if(reduceMotion){
-        posY = 0;
-        paintCoin(0);
-        return;
-      }
-      var stiffness = 320, damping = 17, mass = 1;
-      var pos = posY, vel = initialVelocity;
-      var lastT = null;
-      function frame(t){
-        if(lastT == null) lastT = t;
-        var dt = Math.min((t - lastT) / 1000, 0.032);
-        lastT = t;
-        var acc = (-stiffness * pos - damping * vel) / mass;
-        vel += acc * dt;
-        pos += vel * dt;
-        posY = pos;
-        paintCoin(pos);
-        if(Math.abs(pos) < 0.4 && Math.abs(vel) < 8){
-          posY = 0;
-          paintCoin(0);
-          springHandle = null;
-          return;
-        }
-        springHandle = requestAnimationFrame(frame);
-      }
-      springHandle = requestAnimationFrame(frame);
     }
     // 놓는 순간 손가락의 실제 속도(px/s) -- 최근 몇 프레임의 이동량/시간으로 추정.
     function releaseVelocity(){
@@ -623,43 +612,48 @@
         document.body.appendChild(el);
         var angle = Math.random() * Math.PI * 2;
         var dist = 36 + Math.random() * 100;
-        var dx = Math.cos(angle) * dist;
-        var dy = Math.sin(angle) * dist - 18; // 약간 위로 편향 -- 중력 있는 것처럼 보이게
-        var rot = (Math.random() - 0.5) * 480;
-        (function(node){
-          var anim = node.animate([
-            { transform: 'translate(-50%,-50%) translate(0,0) rotate(0deg) scale(1)', opacity: 1 },
-            { transform: 'translate(-50%,-50%) translate(' + dx + 'px,' + dy + 'px) rotate(' + rot + 'deg) scale(.35)', opacity: 0 }
-          ], { duration: 520 + Math.random() * 260, easing: 'cubic-bezier(.2,.8,.3,1)' });
-          anim.onfinish = function(){ node.remove(); };
-        })(el);
+        gsap.to(el, {
+          x: Math.cos(angle) * dist,
+          y: Math.sin(angle) * dist - 18, // 약간 위로 편향 -- 중력 있는 것처럼 보이게
+          rotation: (Math.random() - 0.5) * 480,
+          scale: 0.35,
+          opacity: 0,
+          duration: 0.52 + Math.random() * 0.26,
+          ease: 'power2.out',
+          onComplete: function(){ this.targets()[0].remove(); }
+        });
       }
     }
 
     function onPointerDown(e){
       if(launched) return;
-      cancelSpring(); // 튕겨 돌아오는 도중이어도 즉시 잡을 수 있게(interruptible) -- 애니메이션이 끝나길 기다리지 않는다
+      gsap.killTweensOf(coin); // 튕기는/도는 도중이어도 즉시 잡을 수 있게(interrupt) -- 끝나길 기다리지 않는다
       dragging = true;
-      startY = e.clientY - posY; // 현재 화면상 위치를 기준으로 오프셋을 잡아서 다시 잡을 때 점프가 없다
+      startY = e.clientY - (gsap.getProperty(coin, 'y') || 0); // 현재 위치 기준 오프셋 -- 다시 잡을 때 점프 없음
       lastTickIndex = 0;
       moveHistory = [{ t: performance.now(), y: e.clientY }];
       coin.classList.add('dragging');
       try{ coin.setPointerCapture(e.pointerId); }catch(err){}
       vibrate(8); // 잡는 즉시 반응 -- 놓을 때까지 기다리지 않는다
+      gsap.to(coin, { scale: 0.94, duration: 0.12, ease: 'power2.out' }); // 잡는 순간 살짝 눌리는 손맛
     }
     function onPointerMove(e){
       if(!dragging || launched) return;
       if(e.cancelable) e.preventDefault();
       var dy = e.clientY - startY;
       var pulled = rubberband(dy);
-      posY = pulled;
-      paintCoin(pulled);
+      var progress = Math.min(Math.abs(pulled) / THRESHOLD, 1);
+      var dir = pulled < 0 ? 'up' : 'down';
+      gsap.set(coin, {
+        y: pulled,
+        rotationX: (pulled < 0 ? 1 : -1) * progress * 20, // 당기는 방향으로 살짝 기울고
+        scaleX: 1 - progress * 0.08,                       // 고무줄처럼 늘어나는 텐션
+        scaleY: 1 + progress * 0.14
+      });
 
       moveHistory.push({ t: performance.now(), y: e.clientY });
       if(moveHistory.length > 6) moveHistory.shift();
 
-      var dir = pulled < 0 ? 'up' : 'down';
-      var progress = Math.min(Math.abs(pulled) / THRESHOLD, 1);
       setHints(dir, progress);
 
       var tickIndex = Math.floor(Math.abs(pulled) / TICK_STEP);
@@ -678,61 +672,59 @@
       dragging = false;
       if(launched) return;
       coin.classList.remove('dragging');
-      // 임계값을 못 넘기고 놓으면 놓는 순간의 속도를 이어받아 스프링으로 원위치까지 튕겨 돌아온다.
-      springBack(releaseVelocity());
       resetHints();
+      // 임계값을 못 넘기고 놓으면 원위치로 튕겨 돌아온다 -- GSAP의 elastic 이징이 진짜
+      // 스프링처럼 자연스럽게 오버슈트했다 잦아든다("쫀득"). 세게 당기다 놓았을수록
+      // (releaseVelocity가 클수록) 조금 더 크고 길게 튕기도록 지속시간을 살짝 늘린다.
+      // 잡는 순간 걸어둔 squish 트윈(scale)이 아직 살아있을 수 있어 먼저 죽여야 한다 --
+      // 안 죽이면 그 트윈이 나중에 끝나면서 여기서 맞춰둔 scaleX/Y를 덮어써버린다.
+      gsap.killTweensOf(coin);
+      var v = Math.abs(releaseVelocity());
+      var duration = gsap.utils.clamp(0.5, 0.9, 0.5 + v / 3200);
+      gsap.to(coin, {
+        y: 0, rotationX: 0, scaleX: 1, scaleY: 1,
+        duration: reduceMotion ? 0.35 : duration,
+        ease: reduceMotion ? 'power2.out' : 'elastic.out(1, 0.4)'
+      });
     }
-    // 가속하다 감속하는 부드러운 곡선(이동에 사용) -- easeOut 하나만 쓰면 처음에 훅
-    // 튀어나가는 느낌이라 "너무 빠르다"고 느껴진다. 시작도 끝도 완만하게.
-    function easeInOutCubic(t){ return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
 
     function launch(dir){
       if(launched) return;
       launched = true;
       dragging = false;
-      cancelSpring();
       coin.classList.remove('dragging');
       gate.classList.add('launched'); // 힌트·안내문 지우고 결과만 또렷하게
       vibrate([14, 30, 14]);
       resetHints();
+      gsap.killTweensOf(coin);
 
-      if(reduceMotion){
-        coin.style.transition = 'opacity .25s ease-out';
-        coin.style.opacity = '0';
-        burstConfetti(dir);
-        showResult(dir);
-      } else {
-        // 던지는 동안: 이동(translateY)은 부드럽게 가속·감속하고(easeInOutCubic), 회전은
-        // 처음부터 끝까지 일정한 속도로 계속 돌려서(선형) "동전이 실제로 도는 게" 눈에
-        // 분명히 보이게 한다. 이동 곡선과 회전 곡선을 일부러 분리했다 -- 둘 다 같은
-        // easeOut을 쓰면 회전도 초반에 몰렸다가 뚝 멈추는 것처럼 보여서 "빨리 끝나버린" 느낌이 난다.
-        var startPosY = posY, t0 = null;
-        var FLY_DURATION = 950;               // 부드럽게 느껴질 만큼 여유 있게
-        var TRAVEL = window.innerHeight * 0.5; // 화면 끝까지 로켓처럼 쏘지 않고 적당히만
-        var SPIN_TURNS = 2.25;                 // 눈에 보이는 회전 수
-        var sign = dir === 'up' ? -1 : 1;
-        var confettiFired = false;
-        (function frame(t){
-          if(t0 == null) t0 = t;
-          var p = Math.min((t - t0) / FLY_DURATION, 1);
-          var moveEase = easeInOutCubic(p);
-          var y = startPosY + sign * moveEase * TRAVEL;
-          var spin = sign * p * 360 * SPIN_TURNS;               // 등속 회전
-          var wobble = Math.sin(p * Math.PI * SPIN_TURNS) * 6;  // 살짝 흔들리는 느낌(3D 텀블링)
-          var fadeStart = 0.65;
-          var opacity = p < fadeStart ? 1 : 1 - (p - fadeStart) / (1 - fadeStart);
-          paintCoin(y, { tilt: wobble, stretch: 0, squeeze: 0, spin: spin, opacity: opacity });
-          if(!confettiFired && p > 0.08){ confettiFired = true; burstConfetti(dir); } // 던지자마자(살짝의 텀 뒤) 터짐
-          if(p < 1){ requestAnimationFrame(frame); }
-          else { showResult(dir); }
-        })(performance.now());
-      }
+      var sign = dir === 'up' ? -1 : 1;
+      var currentY = gsap.getProperty(coin, 'y') || 0;
+      // OS/브라우저가 "동작 줄이기"(prefers-reduced-motion)를 요청했으면 이동 거리·회전
+      // 수·시간을 줄이되 완전히 없애지는 않는다 -- 이건 자동재생이 아니라 사용자가 직접
+      // 던진 결과라서, 아예 안 도는 것보다 짧게라도 도는 게 "반응했다"는 확신을 준다.
+      var TRAVEL = window.innerHeight * (reduceMotion ? 0.22 : 0.5);
+      var SPIN_TURNS = reduceMotion ? 1 : 2.25;    // 눈에 분명히 보이는 회전 수
+      var FLY = reduceMotion ? 0.5 : 0.95;          // 부드럽게 느껴질 만큼 여유 있게(초)
+      if(!reduceMotion) burstConfetti(dir);
+      // 이동과 회전을 같은 타임라인에서 동시에(0초 지점) 돌리되, 서로 다른 이징을 쓴다 --
+      // 이동은 power1.inOut(부드러운 가속·감속)으로 "훅 튀어나가는" 느낌을 없애고,
+      // 회전은 ease:'none'(등속)으로 시종일관 같은 속도로 돌려서 "실제로 돈다"가
+      // 분명히 느껴지게 한다. 둘 다 같은 easeOut을 쓰면 회전도 초반에 몰렸다 뚝
+      // 멈추는 것처럼 보여서 오히려 다 돈 것처럼 안 느껴진다.
+      var tl = gsap.timeline({ onComplete: function(){ showResult(dir); } });
+      tl.to(coin, { y: currentY + sign * TRAVEL, duration: FLY, ease: 'power1.inOut' }, 0)
+          .to(coin, { rotationY: sign * 360 * SPIN_TURNS, duration: FLY, ease: 'none' }, 0)
+          .to(coin, { scaleX: 1, scaleY: 1, duration: FLY * 0.25, ease: 'power1.out' }, 0)
+          // 회전을 충분히 보여준 다음(후반 35%)에야 서서히 사라진다 -- 그래야 "돌았다"는
+          // 인상이 남는다. 너무 일찍 페이드하면 회전이 안 끝난 채 흐지부지 사라져 보인다.
+          .to(coin, { opacity: 0, duration: FLY * 0.35, ease: 'power1.in' }, FLY * 0.65);
 
       castVote(dir); // 투표 완료 시 아래 카드는(이미 그 뒤에서 그려져 있던) picked 모습으로 자동 갱신됨
     }
 
-    // 어디에 투표했는지 잠깐 보여주고(1.5초) -- 그다음에야 원래 페이지로 매끄럽게(페이드) 넘어간다.
-    // castVote()는 이미 위에서 먼저 호출해뒀기 때문에, 이 1.5초 동안 서버 응답이 오고
+    // 어디에 투표했는지 잠깐 보여주고(3초) -- 그다음에야 원래 페이지로 매끄럽게(페이드) 넘어간다.
+    // castVote()는 이미 위에서 먼저 호출해뒀기 때문에, 이 3초 동안 서버 응답이 오고
     // 아래 페이지(이미 그 뒤에서 그려져 있음)의 투표 카드도 picked 모습으로 갱신된다.
     function showResult(dir){
       var badge = document.getElementById('coin-result-badge');
@@ -747,7 +739,7 @@
       setTimeout(function(){
         gate.classList.add('leaving'); // 기존 카드 화면으로 부드럽게 페이드
         setTimeout(function(){ gate.remove(); }, 500);
-      }, 1500);
+      }, 3000);
     }
 
     coin.addEventListener('pointerdown', onPointerDown);
