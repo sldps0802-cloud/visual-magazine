@@ -8,6 +8,9 @@
 # 문제와 무관하게 클라우드에서도 안전하게 돈다. 로컬 PC가 꺼져있어도 이미 수집된
 # 발언의 판정은 계속 제때 나가게 하는 게 이 워크플로우의 역할이다.
 #
+# 판정 뒤에는 정리(cleanup)도 같이 돌린다 -- 발언 나온 지 7일 지나면 지우되, 판정이 아직
+# 안 나온 건(주말 껴서 장이 안 열렸을 수 있음) 판정될 때까지 기다렸다가 판정 다음 날 지운다.
+#
 # 필요한 저장소 secret: CRON_SECRET (Edge Function 환경변수와 같은 값이어야 함).
 # apikey/Authorization의 publishable 키는 비밀이 아니다 -- fortune_site 공개 JS에도
 # 그대로 노출돼 있는 값과 동일(브라우저에 보내지도록 설계된 키).
@@ -30,3 +33,11 @@ jobs:
             -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json" \
             -d '{"action":"visionary-judge"}'
+      - name: Clean up old calls
+        run: |
+          curl -sf -X POST "https://qvsptsspvbzjukjbdwdj.supabase.co/functions/v1/super-action" \
+            -H "apikey: sb_publishable_Wn9BkVEmKZgSq0uicBVx5A_Zevwunor" \
+            -H "Authorization: Bearer sb_publishable_Wn9BkVEmKZgSq0uicBVx5A_Zevwunor" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            -d '{"action":"visionary-cleanup"}'

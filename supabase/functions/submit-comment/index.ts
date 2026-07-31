@@ -366,6 +366,13 @@ function kstDateStr(msOffset = 0) {
   return new Date(Date.now() + msOffset + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
+// 'YYYY-MM-DD' 두 날짜 사이의 일수 차. 발언 피드에 "N일 전" 표시할 때 씀.
+function daysBetweenDateStr(fromStr, toStr) {
+  const from = new Date(fromStr + 'T00:00:00Z').getTime();
+  const to = new Date(toStr + 'T00:00:00Z').getTime();
+  return Math.max(0, Math.round((to - from) / (24 * 60 * 60 * 1000)));
+}
+
 /* ---- 오늘의 예측: 유튜버 "최근 콜"을 오늘의 간다/빠진다 진영으로 묶을 때, 지평이 다른
    콜(예: "하반기 전망")이나 며칠 지난 낡은 콜까지 오늘 진영으로 잘못 대표시키지 않도록
    두 조건을 다 거른다 -- 짧은(+1거래일) 지평이면서 최근 3일 이내인 콜만 인정한다. ---- */
@@ -820,16 +827,18 @@ Deno.serve(async (req) => {
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
       );
       const { data, error } = await supabaseAdmin.from('visionary_calls')
-        .select('influencer_name,statement,direction,status,price_at_call,price_at_judge,benchmark_return_pct,created_at')
+        .select('influencer_name,statement,direction,status,price_at_call,price_at_judge,benchmark_return_pct,statement_date,created_at')
         .order('created_at', { ascending: false })
         .limit(limit);
       if (error) throw error;
+      const today = kstDateStr();
       const rows = (data || []).map((c) => ({
         name: c.influencer_name,
         statement: c.statement,
         direction: c.direction,
         status: c.status,
         excessReturn: c.status === 'pending' ? null : callExcessReturn(c),
+        daysAgo: daysBetweenDateStr(c.statement_date, today),
       }));
       return new Response(JSON.stringify({ rows }), {
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
@@ -1029,11 +1038,40 @@ Deno.serve(async (req) => {
           benchmark_price_at_judge: bq.price,
           benchmark_return_pct: benchmarkReturn,
           status: hit ? 'hit' : 'miss',
+          judged_at: new Date().toISOString(),
         }).eq('id', row.id);
         return !updErr;
       }));
       const judged = results.filter(Boolean).length;
       return new Response(JSON.stringify({ ok: true, judged }), {
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // 비저너리 발언 정리: 발언 나온 지 7일 지나면 지운다. 단, 판정이 아직 안 나왔으면
+    // (주말이 껴서 장이 안 열려 판정을 못 했을 수 있음) 지우지 않고 판정될 때까지
+    // 기다렸다가, 판정된 다음 날 지운다 -- 판정도 못 받고 그냥 사라지는 걸 막기 위함.
+    if (body.action === 'visionary-cleanup') {
+      const cronSecret = Deno.env.get('CRON_SECRET');
+      if (!cronSecret || req.headers.get('x-cron-secret') !== cronSecret) {
+        return new Response(JSON.stringify({ error: 'unauthorized' }), {
+          status: 401, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        });
+      }
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL'),
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
+      );
+      const cutoffStatementDate = kstDateStr(-7 * 24 * 60 * 60 * 1000);
+      const cutoffJudgedAt = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data, error } = await supabaseAdmin.from('visionary_calls')
+        .delete()
+        .lte('statement_date', cutoffStatementDate)
+        .neq('status', 'pending')
+        .lte('judged_at', cutoffJudgedAt)
+        .select('id');
+      if (error) throw error;
+      return new Response(JSON.stringify({ ok: true, deleted: (data || []).length }), {
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
       });
     }

@@ -21,6 +21,11 @@
     --text-muted:rgba(242,242,242,.6);
     --surface:rgba(255,255,255,.06);
     --surface-border:rgba(255,255,255,.14);
+    --up:#e5484d;
+    --down:#3b82f6;
+    /* 투표율에 따라 카드/동전 게이트 주변 은은한 빛의 밝기가 바뀐다(JS가 갱신) */
+    --up-glow:.16;
+    --down-glow:.16;
   }
   :root[data-theme="light"]{
     --gold:#c97a2e;
@@ -63,10 +68,163 @@
 
   main{padding:40px 0 100px;}
   .page-title{font-size:26px;font-weight:800;margin-bottom:6px;}
-  .page-sub{font-size:13px;color:var(--text-muted);margin-bottom:28px;line-height:1.6;}
+  .page-sub{font-size:13px;color:var(--text-muted);margin-bottom:32px;line-height:1.6;}
 
-  /* 은행 앱 계좌 카드 참고: 이름/발언 + 오른쪽 수익률 알약.
-     배경은 상승(빨강)/하락(파랑) 대각선 그라데이션 -- 한국 증시 색 관례 그대로. */
+  /* ---- 오늘의 예측(투표): 버튼과 결과 막대를 한 알약으로 통합. 알약 자체가
+     긍정(빨강)→부정(파랑) 대각선 그라데이션이고, 두 절반이 각각 클릭 가능한 버튼이다.
+     카드 테두리 주변 은은한 빛도 표가 더 몰린 쪽이 밝아지게 JS가 --up-glow/--down-glow로 조절한다. */
+  .vote-card{
+    position:relative;isolation:isolate;overflow:hidden;
+    background:var(--surface);border:1px solid var(--surface-border);border-radius:18px;
+    padding:24px;margin-bottom:32px;text-align:center;
+  }
+  .vote-card::before,.vote-card::after{
+    content:'';position:absolute;top:50%;width:65%;aspect-ratio:1;border-radius:50%;
+    transform:translateY(-50%);z-index:-1;pointer-events:none;filter:blur(30px);
+    transition:opacity .4s ease-out;
+  }
+  /* 원 안쪽만 색이 있고 바깥으로 갈수록 알파가 0으로 떨어지는 방사형 그라데이션 --
+     filter:blur만 쓰면 경계가 뭉개지긴 해도 원래 도형 자체는 단색이라 여전히 딱딱해 보인다. */
+  .vote-card::before{
+    left:-18%;
+    background:radial-gradient(circle, var(--up) 0%, color-mix(in srgb, var(--up) 45%, transparent) 45%, transparent 75%);
+    opacity:var(--up-glow);
+  }
+  .vote-card::after{
+    right:-18%;
+    background:radial-gradient(circle, var(--down) 0%, color-mix(in srgb, var(--down) 45%, transparent) 45%, transparent 75%);
+    opacity:var(--down-glow);
+  }
+  .vote-label{font-size:12px;color:var(--text-muted);margin-bottom:6px;}
+  .vote-question{font-size:18px;font-weight:800;margin-bottom:20px;}
+  .vote-pill{
+    display:flex;border-radius:999px;overflow:hidden;margin-bottom:14px;
+    background:linear-gradient(135deg, var(--up), var(--down));
+  }
+  .vote-half{
+    flex:1;padding:16px 12px;font-family:inherit;cursor:pointer;
+    border:none;background:none;color:#fff;
+    display:flex;flex-direction:column;align-items:center;gap:2px;
+    transition:transform .12s ease-out,opacity .2s ease-out,background .2s ease-out;
+  }
+  .vote-half + .vote-half{border-left:1px solid rgba(255,255,255,.25);}
+  .vote-half:active{transform:scale(.97);}
+  .vote-half-label{font-size:15px;font-weight:800;}
+  .vote-half-pct{font-size:12px;font-weight:700;opacity:.85;}
+  .vote-half:disabled{cursor:default;}
+  .vote-half:disabled:not(.picked){opacity:.4;}
+  .vote-half.picked{background:rgba(255,255,255,.18);}
+  .vote-counts{display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);}
+  .vote-msg{font-size:12px;color:var(--amber);margin-top:10px;min-height:14px;}
+
+  /* ---- 동전 던지기 투표 게이트: 처음 들어왔을 때(오늘 아직 투표 안 했으면) 화면 전체를
+     덮고 동전만 띄운다. 위로 끌면 고무줄처럼 저항하다 일정 거리를 넘으면 날아가며 긍정에
+     투표되고, 아래로 끌면 떨어지며 부정에 투표된다. 임계값을 못 넘기고 놓으면 원위치로
+     튕겨 돌아온다. 이미 오늘 투표했으면(위 투표 로직과 같은 votedKey) 아예 안 뜬다. ---- */
+  .coin-gate{
+    position:fixed;inset:0;z-index:100;perspective:1000px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;
+    background:
+      radial-gradient(ellipse 900px 550px at 50% 0%, color-mix(in srgb, var(--gold) 24%, transparent), transparent 70%),
+      linear-gradient(180deg,var(--bg-top),var(--bg-mid) 45%,var(--bg-bottom) 100%);
+    touch-action:none;transition:opacity .45s ease-out;
+  }
+  .coin-gate.leaving{opacity:0;pointer-events:none;}
+  .coin-gate-glow{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden;}
+  .coin-gate-glow::before,.coin-gate-glow::after{
+    content:'';position:absolute;left:50%;width:72vmin;height:72vmin;border-radius:50%;
+    transform:translateX(-50%);filter:blur(46px);transition:opacity .3s ease-out;
+  }
+  .coin-gate-glow::before{
+    top:-14%;
+    background:radial-gradient(circle, var(--up) 0%, color-mix(in srgb, var(--up) 45%, transparent) 45%, transparent 75%);
+    opacity:calc(var(--up-glow) + var(--drag-up, 0));
+  }
+  .coin-gate-glow::after{
+    bottom:-14%;
+    background:radial-gradient(circle, var(--down) 0%, color-mix(in srgb, var(--down) 45%, transparent) 45%, transparent 75%);
+    opacity:calc(var(--down-glow) + var(--drag-down, 0));
+  }
+  .coin-gate-hint{
+    position:relative;z-index:1;font-size:13px;font-weight:800;letter-spacing:.02em;
+    opacity:.3;transition:opacity .12s ease-out,transform .12s ease-out;
+  }
+  .coin-gate-hint.up{color:var(--up);}
+  .coin-gate-hint.down{color:var(--down);}
+  /* transform은 CSS transition이 아니라 JS(rAF 스프링 물리)가 매 프레임 직접 갱신한다 --
+     CSS transition과 JS가 같은 속성을 동시에 건드리면 서로 다른 타이밍 곡선이 충돌해서
+     뚝뚝 끊기는 느낌이 난다. 대신 놓는 순간의 속도를 스프링이 그대로 이어받아서
+     "튕겨 돌아오는" 느낌이 훨씬 쫀득해진다. */
+  .coin{
+    position:relative;z-index:1;
+    width:104px;height:104px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;font-size:44px;
+    background:linear-gradient(135deg, var(--gold), var(--amber));
+    box-shadow:0 10px 34px rgba(0,0,0,.4), inset 0 2px 8px rgba(255,255,255,.45);
+    cursor:grab;user-select:none;touch-action:none;
+    transform-style:preserve-3d;backface-visibility:hidden;will-change:transform;
+  }
+  .coin.dragging{cursor:grabbing;}
+  .coin.tick{animation:coin-tick .1s ease-out;}
+  @keyframes coin-tick{ 0%{filter:brightness(1);} 40%{filter:brightness(1.3);} 100%{filter:brightness(1);} }
+  .coin-spark{position:fixed;z-index:101;border-radius:50%;pointer-events:none;}
+  .coin-gate-label{position:relative;z-index:1;font-size:12px;color:var(--text-muted);text-align:center;max-width:230px;line-height:1.6;}
+  .coin-gate-skip{
+    position:relative;z-index:1;font-size:12px;color:var(--text-muted);text-decoration:underline;
+    cursor:pointer;background:none;border:none;font-family:inherit;padding:4px;
+  }
+
+  .panel-title{font-size:17px;font-weight:800;margin-bottom:4px;}
+  .panel-sub{font-size:13px;color:var(--text-muted);margin-bottom:16px;}
+
+  .camps{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:32px;}
+  .camp-col{background:var(--surface);border:1px solid var(--surface-border);border-radius:14px;padding:16px;}
+  .camp-col.up{border-color:color-mix(in srgb, var(--up) 35%, var(--surface-border));}
+  .camp-col.down{border-color:color-mix(in srgb, var(--down) 35%, var(--surface-border));}
+  .camp-head{font-size:13px;font-weight:800;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+  .camp-col.up .camp-head{color:var(--up);}
+  .camp-col.down .camp-head{color:var(--down);}
+  .camp-list{list-style:none;font-size:13px;line-height:2;}
+  .camp-empty{font-size:12px;color:var(--text-muted);}
+  .camp-note{font-size:11px;color:var(--text-muted);line-height:1.6;margin-bottom:32px;}
+
+  /* ---- comment thread (post.html과 동일한 스타일) ---- */
+  .comment-form{margin-bottom:20px;}
+  .comment-identity{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+  .comment-avatar{
+    width:36px;height:36px;border-radius:50%;flex:none;position:relative;
+    display:flex;align-items:center;justify-content:center;font-size:17px;cursor:pointer;
+  }
+  .comment-nickname{font-weight:700;font-size:14px;}
+  .reroll-btn{
+    font-size:12px;padding:4px 10px;border-radius:999px;font-family:inherit;cursor:pointer;
+    background:var(--surface);border:1px solid var(--surface-border);color:var(--text);
+  }
+  .comment-input-row{
+    display:flex;align-items:center;gap:6px;
+    background:var(--surface);border:1px solid var(--surface-border);border-radius:999px;
+    padding:6px 6px 6px 16px;margin-bottom:10px;
+  }
+  .comment-input{
+    flex:1;min-width:0;border:none;background:none;outline:none;
+    color:var(--text);font-family:inherit;font-size:14px;padding:8px 0;
+  }
+  .comment-submit{
+    width:32px;height:32px;border-radius:50%;flex:none;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--amber);color:#fff;border:none;cursor:pointer;
+  }
+  .comment-submit svg{width:16px;height:16px;}
+  .comment-msg{font-size:12px;color:var(--amber);padding-left:16px;min-height:14px;}
+  .comment-list{list-style:none;clear:both;margin-bottom:32px;}
+  .comment-row{display:flex;gap:10px;padding:14px 0;border-bottom:1px solid var(--surface-border);}
+  .comment-row:last-child{border-bottom:none;}
+  .comment-main{flex:1;min-width:0;}
+  .comment-body{font-size:14px;line-height:1.6;color:var(--text);margin-top:2px;white-space:pre-wrap;word-break:break-word;}
+  .comment-empty{font-size:13px;color:var(--text-muted);padding:8px 0;}
+
+  /* ---- 발언 기록: 은행 앱 계좌 카드 참고. 배경은 상승(빨강)/하락(파랑) 대각선
+     그라데이션 -- 한국 증시 색 관례 그대로. ---- */
   .feed-list{list-style:none;}
   .feed-row{
     display:flex;align-items:center;gap:14px;
@@ -74,24 +232,36 @@
     background:var(--surface);border:1px solid var(--surface-border);
   }
   .feed-row:last-child{margin-bottom:0;}
-  .feed-row.dir-up{background:linear-gradient(135deg, color-mix(in srgb, #e5484d 18%, transparent), transparent 70%), var(--surface);}
-  .feed-row.dir-down{background:linear-gradient(135deg, color-mix(in srgb, #3b82f6 18%, transparent), transparent 70%), var(--surface);}
+  .feed-row.dir-up{background:linear-gradient(135deg, color-mix(in srgb, var(--up) 18%, transparent), transparent 70%), var(--surface);}
+  .feed-row.dir-down{background:linear-gradient(135deg, color-mix(in srgb, var(--down) 18%, transparent), transparent 70%), var(--surface);}
   .feed-main{flex:1;min-width:0;}
-  .feed-name{font-weight:800;font-size:14px;margin-bottom:3px;}
+  .feed-name{font-weight:800;font-size:14px;margin-bottom:3px;display:flex;align-items:center;flex-wrap:wrap;gap:2px;}
   .feed-statement{font-size:13px;line-height:1.5;color:var(--text-muted);}
   .feed-rate{font-weight:800;flex:none;font-size:13px;padding:6px 12px;border-radius:999px;background:var(--surface);border:1px solid var(--surface-border);}
-  .feed-rate.pos{color:#ff6b6f;}
-  .feed-rate.neg{color:#5b9bff;}
+  .feed-rate.pos{color:var(--up);}
+  .feed-rate.neg{color:var(--down);}
   .feed-pending{flex:none;font-size:12px;color:var(--text-muted);padding:6px 12px;border-radius:999px;background:var(--surface);border:1px solid var(--surface-border);}
   .feed-dir{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;margin-left:6px;vertical-align:middle;}
-  .feed-row.dir-up .feed-dir{background:color-mix(in srgb, #e5484d 24%, transparent);color:#ff6b6f;}
-  .feed-row.dir-down .feed-dir{background:color-mix(in srgb, #3b82f6 24%, transparent);color:#5b9bff;}
+  .feed-row.dir-up .feed-dir{background:color-mix(in srgb, var(--up) 24%, transparent);color:var(--up);}
+  .feed-row.dir-down .feed-dir{background:color-mix(in srgb, var(--down) 24%, transparent);color:var(--down);}
+  .feed-time{font-size:11px;font-weight:400;color:var(--text-muted);margin-left:4px;}
 
   .note{font-size:12px;line-height:1.7;color:var(--text-muted);margin-top:28px;padding-top:20px;border-top:1px solid var(--surface-border);}
   .empty-note{font-size:13px;color:var(--text-muted);padding:16px 0;}
+
+  @media (max-width:520px){ .camps{grid-template-columns:1fr;} }
 </style>
 </head>
 <body>
+
+<div class="coin-gate" id="coin-gate">
+  <div class="coin-gate-glow" id="coin-gate-glow"></div>
+  <div class="coin-gate-hint up" id="hint-up">▲ 긍정</div>
+  <div class="coin" id="coin">🪙</div>
+  <div class="coin-gate-hint down" id="hint-down">▼ 부정</div>
+  <p class="coin-gate-label">동전을 위로 끌어 던지면 긍정, 아래로 내리면 부정에 투표돼요</p>
+  <button class="coin-gate-skip" id="coin-gate-skip" type="button">나중에 · 그냥 둘러보기</button>
+</div>
 
 <nav>
   <a class="logo-lockup" href="index.html">
@@ -113,13 +283,67 @@
 
 <main class="wrap">
   <div class="page-title">비저너리</div>
-  <p class="page-sub">경제 유튜버·인플루언서 발언 기록 · 최신순 · 특정 종목 매매를 권유하지 않습니다</p>
+  <p class="page-sub">경제 유튜버·인플루언서 발언 기록과 오늘의 예측 · 특정 종목 매매를 권유하지 않습니다</p>
 
+  <div class="vote-card" id="vote-card">
+    <div class="vote-label" id="vote-benchmark">코스피 기준</div>
+    <div class="vote-question">다음 거래일 코스피, 긍정일까요 부정일까요?</div>
+    <div class="vote-pill">
+      <button class="vote-half up" id="vote-up">
+        <span class="vote-half-label">📈 긍정</span>
+        <span class="vote-half-pct" id="vote-pct-up">50%</span>
+      </button>
+      <button class="vote-half down" id="vote-down">
+        <span class="vote-half-label">📉 부정</span>
+        <span class="vote-half-pct" id="vote-pct-down">50%</span>
+      </button>
+    </div>
+    <div class="vote-counts">
+      <span id="vote-count-up">긍정 0표</span>
+      <span id="vote-count-down">부정 0표</span>
+    </div>
+    <div class="vote-msg" id="vote-msg"></div>
+  </div>
+
+  <div class="panel-title">오늘의 진영</div>
+  <div class="panel-sub">유튜버들의 최근 단기 콜(3일 이내 · +1거래일 지평만) 기준</div>
+  <div class="camps">
+    <div class="camp-col up">
+      <div class="camp-head">📈 간다파</div>
+      <ul class="camp-list" id="camp-up"><li class="camp-empty">조건에 맞는 최근 콜이 없어요.</li></ul>
+    </div>
+    <div class="camp-col down">
+      <div class="camp-head">📉 빠진다파</div>
+      <ul class="camp-list" id="camp-down"><li class="camp-empty">조건에 맞는 최근 콜이 없어요.</li></ul>
+    </div>
+  </div>
+  <p class="camp-note">지평이 긴 콜(예: "하반기 전망")이나 3일 넘게 지난 콜은 오늘의 진영에서 제외돼요 — 오늘/내일 얘기가 아닌 발언까지 오늘의 표로 잘못 세지 않기 위해서예요.</p>
+
+  <div class="panel-title">오늘의 한줄</div>
+  <div class="panel-sub">간다? 빠진다? 이유를 한 줄로 남겨보세요.</div>
+  <div class="comment-form">
+    <div class="comment-identity">
+      <div class="comment-avatar" id="my-avatar"></div>
+      <span class="comment-nickname" id="my-nickname"></span>
+      <button class="reroll-btn" id="reroll-btn">랜덤 변경</button>
+    </div>
+    <div class="comment-input-row">
+      <input type="text" class="comment-input" id="comment-input" placeholder="한 줄로 이유를 남겨보세요" maxlength="100">
+      <button class="comment-submit" id="comment-submit" aria-label="댓글 남기기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+      </button>
+    </div>
+    <div class="comment-msg" id="comment-msg"></div>
+  </div>
+  <ul class="comment-list" id="comment-list"></ul>
+
+  <div class="panel-title">발언 기록</div>
+  <div class="panel-sub">최신순 · 며칠 전 발언인지 함께 표시돼요</div>
   <ul class="feed-list" id="feed-list">
     <li class="empty-note">불러오는 중…</li>
   </ul>
 
-  <p class="note">판정은 부호(적중·빗나감)뿐 아니라 같은 기간 벤치마크 대비 초과수익도 함께 봅니다. 판정 전인 발언은 수익률을 표시하지 않습니다 — 아직 결과가 안 나온 걸 0%로 오해하지 않도록요. 이 기록은 발언-결과를 남기는 것일 뿐 인물 평가나 투자 조언이 아니며, 판단과 그 결과의 책임은 전적으로 본인에게 있습니다.</p>
+  <p class="note">판정은 부호(적중·빗나감)뿐 아니라 같은 기간 벤치마크 대비 초과수익도 함께 봅니다. 판정 전인 발언은 수익률을 표시하지 않습니다 — 아직 결과가 안 나온 걸 0%로 오해하지 않도록요. 발언은 나온 지 7일이 지나면 정리되며(판정이 늦어졌으면 판정된 다음 날 정리), 이 기록은 발언-결과를 남기는 것일 뿐 인물 평가나 투자 조언이 아니며 판단과 그 결과의 책임은 전적으로 본인에게 있습니다.</p>
 </main>
 
 <script src="vendor/supabase.min.js"></script>
@@ -144,7 +368,430 @@
     });
   }
 
-  fetch(SUPABASE_URL + '/functions/v1/super-action', {
+  var FN_URL = SUPABASE_URL + '/functions/v1/super-action';
+
+  // 서버(Edge Function)와 같은 이유로 KST 달력 날짜를 써야 한다 -- UTC로 하면 한국 새벽
+  // 0~9시엔 클라이언트가 "어제"로 착각해서, 이미 오늘 투표했는데도 다시 투표 가능한 것처럼
+  // 보이거나 반대로 아직 어제인데 오늘 걸로 잠기는 하루 어긋남이 생긴다.
+  function kstDateStr(){
+    return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  }
+
+  /* ---- 투표 ---- */
+  var votedKey = 'today_voted_' + kstDateStr();
+
+  function loadStatus(){
+    fetch(FN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY },
+      body: JSON.stringify({ action: 'today-status' })
+    }).then(function(r){ return r.json(); }).then(function(res){
+      if(res.error) return;
+      renderVoteCounts(res.upVotes, res.downVotes);
+      renderCamps(res.campUp || [], res.campDown || []);
+      if(res.myVote) lockVoteUI(res.myVote);
+    });
+  }
+
+  function renderVoteCounts(up, down){
+    var total = up + down;
+    var upPct = total ? Math.round(up / total * 100) : 50;
+    var downPct = 100 - upPct;
+    document.getElementById('vote-pct-up').textContent = upPct + '%';
+    document.getElementById('vote-pct-down').textContent = downPct + '%';
+    document.getElementById('vote-count-up').textContent = '긍정 ' + up + '표';
+    document.getElementById('vote-count-down').textContent = '부정 ' + down + '표';
+    // 표가 더 몰린 쪽 주변 빛을 더 밝게(진하게) -- 0~100% 를 .12~.44 불투명도로 매핑
+    // :root에 걸어서 투표 카드와 동전 게이트 배경이 같은 값을 같이 쓰게 한다.
+    var root = document.documentElement;
+    root.style.setProperty('--up-glow', (0.12 + upPct / 100 * 0.32).toFixed(2));
+    root.style.setProperty('--down-glow', (0.12 + downPct / 100 * 0.32).toFixed(2));
+  }
+
+  function renderCamps(up, down){
+    var upEl = document.getElementById('camp-up');
+    var downEl = document.getElementById('camp-down');
+    upEl.innerHTML = up.length ? up.map(function(n){ return '<li>' + esc(n) + '</li>'; }).join('') : '<li class="camp-empty">조건에 맞는 최근 콜이 없어요.</li>';
+    downEl.innerHTML = down.length ? down.map(function(n){ return '<li>' + esc(n) + '</li>'; }).join('') : '<li class="camp-empty">조건에 맞는 최근 콜이 없어요.</li>';
+  }
+
+  function lockVoteUI(direction){
+    localStorage.setItem(votedKey, direction);
+    document.getElementById('vote-up').disabled = true;
+    document.getElementById('vote-down').disabled = true;
+    document.getElementById('vote-up').classList.toggle('picked', direction === 'up');
+    document.getElementById('vote-down').classList.toggle('picked', direction === 'down');
+    document.getElementById('vote-msg').textContent = '오늘 투표 완료! 내일 다시 투표할 수 있어요.';
+  }
+
+  if(localStorage.getItem(votedKey)) lockVoteUI(localStorage.getItem(votedKey));
+
+  function castVote(direction){
+    if(localStorage.getItem(votedKey)) return;
+    document.getElementById('vote-up').disabled = true;
+    document.getElementById('vote-down').disabled = true;
+    fetch(FN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY },
+      body: JSON.stringify({ action: 'today-vote', direction: direction })
+    }).then(function(r){ return r.json(); }).then(function(res){
+      if(res.error){
+        document.getElementById('vote-msg').textContent = res.error;
+        if(res.error.indexOf('이미') === -1){
+          document.getElementById('vote-up').disabled = false;
+          document.getElementById('vote-down').disabled = false;
+        } else {
+          lockVoteUI(direction); // 서버가 "이미 투표함"이라 하면 로컬도 맞춰서 잠금
+        }
+        return;
+      }
+      lockVoteUI(direction);
+      loadStatus();
+    }).catch(function(){
+      document.getElementById('vote-up').disabled = false;
+      document.getElementById('vote-down').disabled = false;
+      document.getElementById('vote-msg').textContent = '투표 실패, 다시 시도해주세요.';
+    });
+  }
+  document.getElementById('vote-up').addEventListener('click', function(){ castVote('up'); });
+  document.getElementById('vote-down').addEventListener('click', function(){ castVote('down'); });
+
+  loadStatus();
+
+  /* ---- 동전 던지기 투표 게이트: 토스식 "3D로 통통 튀는 동전" 모션 참고.
+     transform은 CSS transition이 아니라 매 프레임 JS(rAF)가 직접 계산해서 그린다 --
+     그래야 손을 놓는 순간의 속도를 스프링이 그대로 이어받아서(velocity handoff)
+     "튕겨 돌아오는" 느낌이 고정된 CSS 곡선보다 훨씬 쫀득해지고, 애니메이션 도중에
+     다시 잡아도(interrupt) 현재 위치에서 자연스럽게 이어진다. ---- */
+  (function(){
+    var gate = document.getElementById('coin-gate');
+    var coin = document.getElementById('coin');
+    var hintUp = document.getElementById('hint-up');
+    var hintDown = document.getElementById('hint-down');
+    var glow = document.getElementById('coin-gate-glow');
+    var skipBtn = document.getElementById('coin-gate-skip');
+
+    // 오늘 이미 투표한 사람에게는 안 띄운다 -- votedKey는 위 투표 로직과 같은 키라 날짜가
+    // 바뀌면(다음날) 자동으로 다시 보인다. 이번 방문에서 "그냥 둘러보기"로 건너뛴 적
+    // 있어도(투표는 안 했지만) 이 세션 동안은 다시 안 띄운다.
+    if(localStorage.getItem(votedKey) || sessionStorage.getItem('coin_gate_skipped')){
+      gate.remove();
+      return;
+    }
+
+    var THRESHOLD = 92;   // 이 이상 끌면 발사 확정
+    var MAX_PULL = 150;   // 고무줄 저항 한계 -- 끌수록 점점 덜 따라온다
+    var TICK_STEP = 16;   // 이 간격마다 "드르륵" 틱(진동 + 반짝임)
+    var reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    var dragging = false, launched = false;
+    var startY = 0, lastTickIndex = 0;
+    var posY = 0;           // 코인의 "현재" translateY -- 드래그와 스프링이 공유하는 진짜값(presentation value)
+    var moveHistory = [];   // 최근 pointermove 몇 개(t, y) -- 놓는 순간 속도 계산용
+    var springHandle = null;
+
+    function vibrate(pattern){
+      try{ if(navigator.vibrate) navigator.vibrate(pattern); }catch(e){}
+    }
+    // iOS 스타일 고무줄 저항 곡선: 끌수록 점점 느려지며 MAX_PULL에 점근한다(하드 스톱 없음).
+    function rubberband(dy){
+      var sign = dy < 0 ? -1 : 1, abs = Math.abs(dy);
+      return sign * MAX_PULL * (1 - Math.exp(-abs / MAX_PULL));
+    }
+    // 드래그 중/발사 중 공통으로 쓰는 3D 변형: 당기는(또는 날아가는) 방향으로 살짝
+    // 기울고(rotateX) 늘어나는(stretch) 고무줄 텐션 + 회전(spin, rotateY)을 합친다.
+    function paintCoin(y, opts){
+      opts = opts || {};
+      var progress = Math.min(Math.abs(y) / THRESHOLD, 1);
+      var tilt = (y < 0 ? 1 : -1) * progress * (opts.tilt == null ? 20 : opts.tilt);
+      var stretch = 1 + progress * (opts.stretch == null ? 0.14 : opts.stretch);
+      var squeeze = 1 - progress * (opts.squeeze == null ? 0.08 : opts.squeeze);
+      var spin = opts.spin || 0;
+      coin.style.transform =
+        'translateY(' + y + 'px) rotateX(' + tilt + 'deg)' +
+        (spin ? ' rotateY(' + spin + 'deg)' : '') +
+        ' scale(' + squeeze + ',' + stretch + ')';
+      if(opts.opacity != null) coin.style.opacity = String(opts.opacity);
+    }
+    function setHints(dir, progress){
+      hintUp.style.opacity = dir === 'up' ? (0.3 + progress * 0.7) : 0.3;
+      hintUp.style.transform = dir === 'up' ? 'scale(' + (1 + progress * 0.2) + ')' : 'scale(1)';
+      hintDown.style.opacity = dir === 'down' ? (0.3 + progress * 0.7) : 0.3;
+      hintDown.style.transform = dir === 'down' ? 'scale(' + (1 + progress * 0.2) + ')' : 'scale(1)';
+      glow.style.setProperty('--drag-up', dir === 'up' ? (progress * 0.35).toFixed(2) : 0);
+      glow.style.setProperty('--drag-down', dir === 'down' ? (progress * 0.35).toFixed(2) : 0);
+    }
+    function resetHints(){
+      hintUp.style.opacity = ''; hintUp.style.transform = '';
+      hintDown.style.opacity = ''; hintDown.style.transform = '';
+      glow.style.setProperty('--drag-up', 0);
+      glow.style.setProperty('--drag-down', 0);
+    }
+    function cancelSpring(){
+      if(springHandle){ cancelAnimationFrame(springHandle); springHandle = null; }
+    }
+    // 임계값을 못 넘기고 놓았을 때: 실제 스프링 물리(질량-감쇠-강성)로 원위치까지 계산한다.
+    // 놓는 순간의 속도(velocity)를 초기값으로 그대로 넘겨받아서, 세게 당기다 놓으면
+    // 더 크게 튕기고 살살 놓으면 살짝만 흔들리며 돌아온다 -- 고정 시간의 CSS transition으로는
+    // 못 내는 느낌이다.
+    function springBack(initialVelocity){
+      cancelSpring();
+      if(reduceMotion){
+        posY = 0;
+        paintCoin(0);
+        return;
+      }
+      var stiffness = 320, damping = 17, mass = 1;
+      var pos = posY, vel = initialVelocity;
+      var lastT = null;
+      function frame(t){
+        if(lastT == null) lastT = t;
+        var dt = Math.min((t - lastT) / 1000, 0.032);
+        lastT = t;
+        var acc = (-stiffness * pos - damping * vel) / mass;
+        vel += acc * dt;
+        pos += vel * dt;
+        posY = pos;
+        paintCoin(pos);
+        if(Math.abs(pos) < 0.4 && Math.abs(vel) < 8){
+          posY = 0;
+          paintCoin(0);
+          springHandle = null;
+          return;
+        }
+        springHandle = requestAnimationFrame(frame);
+      }
+      springHandle = requestAnimationFrame(frame);
+    }
+    // 놓는 순간 손가락의 실제 속도(px/s) -- 최근 몇 프레임의 이동량/시간으로 추정.
+    function releaseVelocity(){
+      if(moveHistory.length < 2) return 0;
+      var a = moveHistory[0], b = moveHistory[moveHistory.length - 1];
+      var dt = (b.t - a.t) / 1000;
+      return dt > 0 ? (b.y - a.y) / dt : 0;
+    }
+    // 투표가 확정되는 순간(발사) 색종이를 코인 위치에서 흩뿌린다 -- 긍정/부정 색으로,
+    // "완료됐다"는 걸 말이 아니라 움직임으로 알려준다.
+    function burstConfetti(dir){
+      if(reduceMotion) return;
+      var rect = coin.getBoundingClientRect();
+      var cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+      var css = getComputedStyle(document.documentElement);
+      var color = (dir === 'up' ? css.getPropertyValue('--up') : css.getPropertyValue('--down')).trim() || '#fff';
+      var COUNT = 14;
+      for(var i = 0; i < COUNT; i++){
+        var el = document.createElement('div');
+        el.className = 'coin-spark';
+        var size = 4 + Math.random() * 5;
+        el.style.width = size + 'px';
+        el.style.height = size + 'px';
+        el.style.left = cx + 'px';
+        el.style.top = cy + 'px';
+        el.style.background = Math.random() < 0.6 ? color : '#ffcf8a';
+        document.body.appendChild(el);
+        var angle = Math.random() * Math.PI * 2;
+        var dist = 36 + Math.random() * 100;
+        var dx = Math.cos(angle) * dist;
+        var dy = Math.sin(angle) * dist - 18; // 약간 위로 편향 -- 중력 있는 것처럼 보이게
+        var rot = (Math.random() - 0.5) * 480;
+        (function(node){
+          var anim = node.animate([
+            { transform: 'translate(-50%,-50%) translate(0,0) rotate(0deg) scale(1)', opacity: 1 },
+            { transform: 'translate(-50%,-50%) translate(' + dx + 'px,' + dy + 'px) rotate(' + rot + 'deg) scale(.35)', opacity: 0 }
+          ], { duration: 520 + Math.random() * 260, easing: 'cubic-bezier(.2,.8,.3,1)' });
+          anim.onfinish = function(){ node.remove(); };
+        })(el);
+      }
+    }
+
+    function onPointerDown(e){
+      if(launched) return;
+      cancelSpring(); // 튕겨 돌아오는 도중이어도 즉시 잡을 수 있게(interruptible) -- 애니메이션이 끝나길 기다리지 않는다
+      dragging = true;
+      startY = e.clientY - posY; // 현재 화면상 위치를 기준으로 오프셋을 잡아서 다시 잡을 때 점프가 없다
+      lastTickIndex = 0;
+      moveHistory = [{ t: performance.now(), y: e.clientY }];
+      coin.classList.add('dragging');
+      try{ coin.setPointerCapture(e.pointerId); }catch(err){}
+      vibrate(8); // 잡는 즉시 반응 -- 놓을 때까지 기다리지 않는다
+    }
+    function onPointerMove(e){
+      if(!dragging || launched) return;
+      if(e.cancelable) e.preventDefault();
+      var dy = e.clientY - startY;
+      var pulled = rubberband(dy);
+      posY = pulled;
+      paintCoin(pulled);
+
+      moveHistory.push({ t: performance.now(), y: e.clientY });
+      if(moveHistory.length > 6) moveHistory.shift();
+
+      var dir = pulled < 0 ? 'up' : 'down';
+      var progress = Math.min(Math.abs(pulled) / THRESHOLD, 1);
+      setHints(dir, progress);
+
+      var tickIndex = Math.floor(Math.abs(pulled) / TICK_STEP);
+      if(tickIndex > lastTickIndex){
+        lastTickIndex = tickIndex;
+        vibrate(6);
+        coin.classList.remove('tick');
+        void coin.offsetWidth; // 강제 리플로우로 같은 틱 애니메이션을 다시 재생
+        coin.classList.add('tick');
+      }
+
+      if(Math.abs(pulled) >= THRESHOLD - 0.5) launch(dir);
+    }
+    function onPointerUp(){
+      if(!dragging) return;
+      dragging = false;
+      if(launched) return;
+      coin.classList.remove('dragging');
+      // 임계값을 못 넘기고 놓으면 놓는 순간의 속도를 이어받아 스프링으로 원위치까지 튕겨 돌아온다.
+      springBack(releaseVelocity());
+      resetHints();
+    }
+    function launch(dir){
+      if(launched) return;
+      launched = true;
+      dragging = false;
+      cancelSpring();
+      coin.classList.remove('dragging');
+      vibrate([14, 30, 14]);
+      burstConfetti(dir);
+      resetHints();
+
+      if(reduceMotion){
+        coin.style.transition = 'opacity .25s ease-out';
+        coin.style.opacity = '0';
+      } else {
+        // 날아가는 동안도 rAF로 직접 그린다(3D 회전 + 늘어짐 + 축소를 한 프레임 안에서
+        // 같이 갱신해야 회전과 사라짐이 어긋나지 않는다 -- Apple이 말하는 "harmony").
+        var startPosY = posY, t0 = null, DURATION = 620;
+        var sign = dir === 'up' ? -1 : 1;
+        (function frame(t){
+          if(t0 == null) t0 = t;
+          var p = Math.min((t - t0) / DURATION, 1);
+          var ease = 1 - Math.pow(1 - p, 3); // easeOutCubic -- 처음에 훅 튀어나가고 서서히 느려짐
+          var y = startPosY + sign * ease * (window.innerHeight * 1.3);
+          paintCoin(y, { tilt: -sign * 26, stretch: 0.1, squeeze: 0.1, spin: sign * ease * 620, opacity: 1 - ease });
+          if(p < 1) requestAnimationFrame(frame);
+        })(performance.now());
+      }
+
+      setTimeout(function(){ gate.classList.add('leaving'); }, 260);
+      setTimeout(function(){ gate.remove(); }, 750);
+      castVote(dir); // 투표 완료 시 아래 카드는(이미 그 뒤에서 그려져 있던) picked 모습으로 자동 갱신됨
+    }
+
+    coin.addEventListener('pointerdown', onPointerDown);
+    coin.addEventListener('pointermove', onPointerMove);
+    coin.addEventListener('pointerup', onPointerUp);
+    coin.addEventListener('pointercancel', onPointerUp);
+
+    skipBtn.addEventListener('click', function(){
+      sessionStorage.setItem('coin_gate_skipped', '1');
+      gate.classList.add('leaving');
+      setTimeout(function(){ gate.remove(); }, 500);
+    });
+  })();
+
+  /* ---- 댓글: post.html과 동일한 랜덤 정체성·모더레이션 흐름 ---- */
+  var COMMENT_ADJS = ['씩씩한','유쾌한','다정한','용감한','엉뚱한','차분한','활발한','느긋한','상냥한','똑똑한','부지런한','소심한','명랑한','시크한','든든한','살가운','재빠른','어여쁜','늠름한','수줍은'];
+  var COMMENT_ANIMALS = {
+    '치타':'🐆','알파카':'🦙','사자':'🦁','여우':'🦊','곰':'🐻','토끼':'🐰','고양이':'🐱','강아지':'🐶',
+    '판다':'🐼','펭귄':'🐧','코알라':'🐨','다람쥐':'🐿️','부엉이':'🦉','수달':'🦦','하마':'🦛','기린':'🦒',
+    '호랑이':'🐯','늑대':'🐺','오소리':'🦡','낙타':'🐫'
+  };
+  var AVATAR_COLORS = ['#ffd9a8','#a8d8ff','#c9a8ff','#a8ffd0','#ffb8d0','#ffe9a8','#a8f0ff','#d0ffa8'];
+  var myIdentity = null;
+
+  function pick(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
+  function rollIdentity(){
+    var animals = Object.keys(COMMENT_ANIMALS);
+    var adj = pick(COMMENT_ADJS), animal = pick(animals);
+    var nickname = adj + animal;
+    var colorIdx = 0;
+    for(var i = 0; i < nickname.length; i++) colorIdx += nickname.charCodeAt(i);
+    myIdentity = { nickname: nickname, emoji: COMMENT_ANIMALS[animal], color: AVATAR_COLORS[colorIdx % AVATAR_COLORS.length] };
+    return myIdentity;
+  }
+  function paintIdentity(){
+    var av = document.getElementById('my-avatar');
+    av.style.background = myIdentity.color;
+    av.textContent = myIdentity.emoji;
+    document.getElementById('my-nickname').textContent = myIdentity.nickname;
+  }
+  function animalOf(nickname){
+    var animals = Object.keys(COMMENT_ANIMALS);
+    for(var i = 0; i < animals.length; i++){ if(nickname.indexOf(animals[i]) !== -1) return animals[i]; }
+    return null;
+  }
+  function commentAvatarHtml(nickname, emoji){
+    var colorIdx = 0;
+    for(var i = 0; i < nickname.length; i++) colorIdx += nickname.charCodeAt(i);
+    var color = AVATAR_COLORS[colorIdx % AVATAR_COLORS.length];
+    return '<div class="comment-avatar" style="background:' + color + '">' + emoji + '</div>';
+  }
+
+  rollIdentity();
+  paintIdentity();
+  document.getElementById('reroll-btn').addEventListener('click', function(){
+    rollIdentity();
+    paintIdentity();
+  });
+  document.getElementById('comment-input').addEventListener('keydown', function(e){
+    if(e.key === 'Enter'){ e.preventDefault(); document.getElementById('comment-submit').click(); }
+  });
+  document.getElementById('comment-submit').addEventListener('click', function(){
+    var input = document.getElementById('comment-input');
+    var text = input.value.trim();
+    var msg = document.getElementById('comment-msg');
+    if(!text){ msg.textContent = '댓글 내용을 입력하세요.'; return; }
+    var btn = this;
+    btn.disabled = true;
+    msg.textContent = '올리는 중…';
+    fetch(FN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY },
+      body: JSON.stringify({ action: 'today-comment', nickname: myIdentity.nickname, avatar_seed: myIdentity.nickname, body: text })
+    }).then(function(r){ return r.json(); }).then(function(res){
+      btn.disabled = false;
+      if(res.error){ msg.textContent = res.error; return; }
+      msg.textContent = res.hidden ? '링크가 포함돼 있어 검토 후 노출돼요.' : '';
+      input.value = '';
+      if(res.data && res.data.nickname !== myIdentity.nickname){
+        myIdentity.nickname = res.data.nickname;
+        paintIdentity();
+      }
+      loadComments();
+    }).catch(function(){ btn.disabled = false; msg.textContent = '올리기 실패, 다시 시도해주세요.'; });
+  });
+
+  function loadComments(){
+    var today = kstDateStr();
+    db.from('today_comments').select('*').eq('vote_date', today).order('created_at', {ascending:false}).then(function(res){
+      var list = document.getElementById('comment-list');
+      var comments = res.data || [];
+      if(comments.length === 0){
+        list.innerHTML = '<li class="comment-empty">첫 한줄을 남겨보세요.</li>';
+        return;
+      }
+      list.innerHTML = comments.map(function(c){
+        var emoji = COMMENT_ANIMALS[animalOf(c.nickname)] || '🐾';
+        return '<li class="comment-row">' +
+          commentAvatarHtml(c.nickname, emoji) +
+          '<div class="comment-main">' +
+            '<span class="comment-nickname">' + esc(c.nickname) + '</span>' +
+            '<div class="comment-body">' + esc(c.body) + '</div>' +
+          '</div>' +
+        '</li>';
+      }).join('');
+    });
+  }
+  loadComments();
+
+  /* ---- 발언 기록 피드 ---- */
+  fetch(FN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY },
     body: JSON.stringify({ action: 'visionary-feed', limit: 50 })
@@ -167,8 +814,9 @@
         : '<span class="feed-rate ' + (r.excessReturn >= 0 ? 'pos' : 'neg') + '">' +
             (r.excessReturn >= 0 ? '+' : '') + r.excessReturn.toFixed(1) + '%</span>';
       var dirHtml = '<span class="feed-dir">' + (r.direction === 'up' ? '간다' : '빠진다') + '</span>';
+      var timeHtml = '<span class="feed-time">' + (r.daysAgo == null ? '' : r.daysAgo + '일 전') + '</span>';
       return '<li class="feed-row ' + dirClass + '">' +
-        '<div class="feed-main"><div class="feed-name">' + esc(r.name) + dirHtml + '</div><div class="feed-statement">' + esc(r.statement) + '</div></div>' +
+        '<div class="feed-main"><div class="feed-name">' + esc(r.name) + dirHtml + timeHtml + '</div><div class="feed-statement">' + esc(r.statement) + '</div></div>' +
         rateHtml +
       '</li>';
     }).join('');
