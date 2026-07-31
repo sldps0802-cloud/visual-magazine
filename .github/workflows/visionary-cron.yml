@@ -1,0 +1,37 @@
+# 비저너리(경제 유튜버 승률 랭킹) 자동 수집·판정을 3시간마다 돌린다.
+# 원래 로컬 PC의 Windows 작업 스케줄러로 돌던 걸 여기로 옮겼다 -- PC가 꺼져있으면
+# 안 도는 문제를 없애려고. 실제 작업(RSS 수집·LLM 분류·시세 조회·DB 기록)은 전부
+# Supabase Edge Function(supabase/functions/submit-comment) 안에서 일어나고,
+# 이 워크플로우는 그 함수를 깨우는 트리거 역할만 한다.
+#
+# 필요한 저장소 secret: CRON_SECRET (Edge Function 환경변수와 같은 값이어야 함).
+# apikey/Authorization의 publishable 키는 비밀이 아니다 -- fortune_site 공개 JS에도
+# 그대로 노출돼 있는 값과 동일(브라우저에 보내지도록 설계된 키).
+name: Visionary collect + judge
+
+on:
+  schedule:
+    - cron: '0 */3 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Collect new calls
+        run: |
+          curl -sf -X POST "https://qvsptsspvbzjukjbdwdj.supabase.co/functions/v1/super-action" \
+            -H "apikey: sb_publishable_Wn9BkVEmKZgSq0uicBVx5A_Zevwunor" \
+            -H "Authorization: Bearer sb_publishable_Wn9BkVEmKZgSq0uicBVx5A_Zevwunor" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            -d '{"action":"visionary-collect"}'
+
+      - name: Judge due calls
+        run: |
+          curl -sf -X POST "https://qvsptsspvbzjukjbdwdj.supabase.co/functions/v1/super-action" \
+            -H "apikey: sb_publishable_Wn9BkVEmKZgSq0uicBVx5A_Zevwunor" \
+            -H "Authorization: Bearer sb_publishable_Wn9BkVEmKZgSq0uicBVx5A_Zevwunor" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            -d '{"action":"visionary-judge"}'

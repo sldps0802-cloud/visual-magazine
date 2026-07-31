@@ -209,6 +209,154 @@ function computeVisionaryRanking(calls) {
   return { rows, baseline };
 }
 
+/* ---- 비저너리 자동 수집·판정: 원래 vcompany7/visionary_tool.py(로컬 PC + Windows 작업
+   스케줄러)로 돌던 걸 이 Edge Function으로 옮겼다 -- PC가 꺼져있으면 안 도는 문제를 없애려고.
+   로컬 버전과 다른 점 세 가지(정직하게 기록):
+   1. Ollama 대신 이미 있는 callLLM()(Groq/Cerebras/Gemini 무료 티어)을 쓴다.
+   2. 자막(youtube_transcript_api) 기반 분류 대신 제목+설명만 본다 -- Deno에는 자막 추출
+      라이브러리가 없고, 워치 페이지를 직접 파싱해서 구현하는 건 이번 포팅 범위를 넘어선다.
+      필요해지면 나중에 추가할 수 있다(자막 없이도 경제 유튜브 제목은 대부분 방향이
+      드러나는 편이라 품질 저하는 제한적일 것으로 예상 -- 실측은 아직 안 함).
+   3. "seen" 추적을 로컬 JSON 파일 대신 video_id unique 제약으로 대신한다 -- Edge Function은
+      호출마다 새 프로세스라 로컬 디스크에 상태를 못 남긴다. 부작용: "방향 발언 아님"으로
+      판정된 영상은 기록이 안 남아서, RSS 최신 3개 안에 머무는 동안(새 영상이 더 올라오기
+      전까지) 매 실행마다 다시 분류된다 -- 무료 티어라 비용 문제는 없고, 새 영상에 밀려나면
+      자연히 멈춘다. ---- */
+const VISIONARY_CHANNELS = [
+  { name: '삼프로TV', channelId: 'UChlv4GSd7OQl3js-jkLOnFA' },
+  { name: '슈카월드', channelId: 'UCsJ6RuBiTVWRX156FVbeaGg' },
+  { name: '김단테 (내일은 투자왕)', channelId: 'UCKTMvIu9a4VGSrpWy-8bUrQ' },
+  { name: '한국경제TV', channelId: 'UCF8AeLlUbEpKju6v1H6p8Eg' },
+  { name: '웅달책방', channelId: 'UCbOIEn95Rvnk97KRtSFqvbQ' },
+  { name: '전인구경제연구소', channelId: 'UCznImSIaxZR7fdLCICLdgaQ' },
+  { name: '강환국', channelId: 'UCSWPuzlD337Y6VBkyFPwT8g' },
+  { name: '소수몽키', channelId: 'UCC3yfxS5qC6PCwDzetUuEWg' },
+  { name: '재테크 읽어주는 파일럿', channelId: 'UCaWi2foADm_lKAKnmeQwLSA' },
+  { name: '알렉스 (알상무)', channelId: 'UC5kL3Ee6yY2bOtL2FRtdyuA' },
+  { name: 'E트렌드', channelId: 'UCpsfkRRT7L2nBnizBn_u9YA' },
+  { name: '미국주식 에디', channelId: 'UCMupe3fvv1-Hi3SRxZzSsTw' },
+  { name: '머니코믹스 미장은지금', channelId: 'UCJo6G1u0e_-wS-JQn3T-zEw' },
+  { name: '증시각도기TV', channelId: 'UCdOjVxkj5JA0iDu3_xcsTyQ' },
+  { name: '존버나드', channelId: 'UCA6SixcHtinijIAC3rLc9XA' },
+  { name: '오선의 미국 증시 라이브', channelId: 'UC_JJ_NhRqPKcIOj5Ko3W_3w' },
+  { name: '서대리TV', channelId: 'UCtQkxwZkrruYdy2bVNNW-Rw' },
+  { name: '삼쩜삼캠퍼스', channelId: 'UCamX91KxAzdicrLY6JPXjrw' },
+  { name: '올랜도 킴 미국주식', channelId: 'UCwSSqi-s0wcH6pJbH3YPZqQ' },
+  // 박종훈팀장(바이킹스)은 별도 채널이 아니라 위 '머니코믹스 미장은지금' 채널 안의
+  // 코너라서 따로 추가하지 않음(실측 확인) -- 추가하면 같은 영상이 두 번 잡힘.
+];
+
+// market_tool.py의 WATCH/ALIAS를 그대로 축소 이식 -- 개별 종목 콜을 코스피로 뭉개지 않기 위함.
+const VISIONARY_WATCH = [
+  ['코스피', '^KS11'], ['코스닥', '^KQ11'],
+  ['삼성전자', '005930.KS'], ['SK하이닉스', '000660.KS'],
+  ['나스닥', '^IXIC'], ['S&P500', '^GSPC'],
+  ['반도체ETF(SOXX)', 'SOXX'], ['QQQ', 'QQQ'],
+  ['원/달러', 'KRW=X'], ['WTI유가', 'CL=F'], ['금', 'GC=F'],
+  ['비트코인', 'BTC-USD'], ['이더리움', 'ETH-USD'],
+];
+const VISIONARY_ALIAS = {
+  '삼전': '삼성전자', 'sk하이닉스': 'SK하이닉스', '하이닉스': 'SK하이닉스',
+  'btc': '비트코인', 'eth': '이더리움', 'kospi': '코스피',
+  'kosdaq': '코스닥', 'nasdaq': '나스닥', '환율': '원/달러', '달러': '원/달러',
+  '유가': 'WTI유가', '반도체': '반도체ETF(SOXX)', 'soxx': '반도체ETF(SOXX)',
+};
+function resolveTicker(query) {
+  const q = (query || '').trim().toLowerCase().replace(/\s+/g, '');
+  if (!q) return null;
+  for (const [name, ticker] of VISIONARY_WATCH) {
+    if (q === name.toLowerCase().replace(/\s+/g, '') || q === ticker.toLowerCase()) return [name, ticker];
+  }
+  if (VISIONARY_ALIAS[q]) {
+    const hit = VISIONARY_WATCH.find(([n]) => n === VISIONARY_ALIAS[q]);
+    if (hit) return hit;
+  }
+  for (const [name, ticker] of VISIONARY_WATCH) {
+    if (name.toLowerCase().replace(/\s+/g, '').includes(q)) return [name, ticker];
+  }
+  return null;
+}
+
+// yfinance가 감싸는 바로 그 엔드포인트를 직접 부른다(실측 확인: User-Agent만 있으면
+// 별도 인증·크럼 없이 열림). Deno엔 yfinance 대응품이 없어서 직접 호출한다.
+async function yfQuote(ticker) {
+  try {
+    const r = await fetch(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=5d`,
+      { headers: { 'User-Agent': 'Mozilla/5.0' } },
+    );
+    if (!r.ok) return null;
+    const data = await r.json();
+    const meta = data?.chart?.result?.[0]?.meta;
+    if (!meta || meta.regularMarketPrice == null) return null;
+    return { price: meta.regularMarketPrice };
+  } catch {
+    return null;
+  }
+}
+
+// 순수 달력 날짜 산술(시간대 변환 없이 문자열 그대로 UTC 자정으로 파싱) -- computeTodayCamps와
+// 같은 관례. 공휴일은 무시하고 주말만 건너뛴다(visionary_tool.py와 같은 한계, 정직하게 기록).
+function tradingDaysAfterKST(startStr, n) {
+  const d = new Date(startStr + 'T00:00:00Z');
+  let added = 0;
+  while (added < n) {
+    d.setUTCDate(d.getUTCDate() + 1);
+    const day = d.getUTCDay();
+    if (day !== 0 && day !== 6) added++;
+  }
+  return d.toISOString().slice(0, 10);
+}
+
+const VISIONARY_HORIZON_DAYS = { short: 1, mid: 20, long: 60 };
+const VISIONARY_HORIZON_LABEL = { short: '+1거래일', mid: '+1개월', long: '+3개월' };
+
+async function fetchChannelVideos(channelId, maxN) {
+  try {
+    const r = await fetch(`https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+    });
+    if (!r.ok) return [];
+    const doc = xmlParser.parse(await r.text());
+    let entries = doc?.feed?.entry || [];
+    if (!Array.isArray(entries)) entries = [entries].filter(Boolean);
+    return entries.slice(0, maxN).map((e) => {
+      const idStr = String(e.id || '');
+      const videoId = idStr.includes(':') ? idStr.split(':').pop() : idStr;
+      return {
+        videoId,
+        title: String(e.title || ''),
+        description: String(e?.['media:group']?.['media:description'] || ''),
+      };
+    }).filter((v) => v.videoId);
+  } catch {
+    return [];
+  }
+}
+
+async function classifyVideo(title, description) {
+  const prompt =
+    '다음은 경제 유튜브 영상의 제목과 설명이야. 이 영상이 특정 시장이나 종목의 방향(오른다/내린다)을 ' +
+    '명시적으로 말하고 있는지 판단해줘. 뉘앙스로만 방향이 있어도 되지만, 단순 뉴스 요약·질문·중립적 ' +
+    '설명은 방향 발언이 아니야.\n\n' +
+    '방향 발언이면 이 JSON만 답해: {"is_call": true, "direction": "up 또는 down", ' +
+    '"target": "코스피 또는 언급된 개별 종목명", "horizon": "short(며칠 내) 또는 mid(분기·하반기) 또는 long(연 단위)", ' +
+    '"statement": "발언 핵심을 짧게 그대로 인용"}\n' +
+    '방향 발언이 아니면: {"is_call": false}\n\n' +
+    `제목: ${title}\n설명: ${(description || '').slice(0, 500)}`;
+  const answer = await callVisionaryLLM(prompt, { json: true, temperature: 0, maxTokens: 300 });
+  if (!answer) return null;
+  const m = answer.match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try {
+    const data = JSON.parse(m[0]);
+    if (!data.is_call || (data.direction !== 'up' && data.direction !== 'down')) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
 /* ---- 오늘의 예측 관련 "오늘" 날짜는 전부 KST(UTC+9, DST 없음) 기준이어야 한다. 서버(Deno)는
    UTC로 돈다 -- new Date().toISOString()을 그대로 쓰면 한국 새벽 0~9시 사이엔 어제 UTC 날짜로
    찍혀서, 사용자에게는 이미 "오늘"인데 투표·댓글이 어제 날짜에 묶이는 버그가 생긴다
@@ -437,6 +585,23 @@ async function callGemini(prompt, opts) {
 }
 async function callLLM(prompt, opts = {}) {
   return (await callGroq(prompt, opts)) || (await callCerebras(prompt, opts)) || (await callGemini(prompt, opts));
+}
+
+// 비저너리(영상 분류)는 "엇갈린 시선"(세계 보도 비교)과 같은 Groq/Cerebras/Gemini
+// 무료 티어를 그대로 쓰면 사용량을 나눠 써야 한다 -- 한쪽이 많이 쓰면 다른 쪽이
+// fail-open으로 조용히 실패할 수 있다. OpenRouter(별도 계정·완전히 분리된 쿼터,
+// callOpenAiChat이 이미 OpenAI 호환 형식이라 그대로 재사용됨)를 우선 쓰고,
+// OPENROUTER_API_KEY가 없으면 기존 체인으로 그대로 폴백한다(설정 안 해도 동작 --
+// deepl_api_key와 같은 패턴). 무료 모델 슬러그는 OpenRouter가 종종 바꾸니, 가입 시
+// openrouter.ai/models?max_price=0 에서 현재 무료 모델명을 확인해서 필요하면 교체하세요.
+async function callOpenRouter(prompt, opts) {
+  return callOpenAiChat(
+    'https://openrouter.ai/api/v1/chat/completions',
+    Deno.env.get('OPENROUTER_API_KEY'), 'nvidia/nemotron-3-super-120b-a12b:free', prompt, opts,
+  );
+}
+async function callVisionaryLLM(prompt, opts = {}) {
+  return (await callOpenRouter(prompt, opts)) || (await callLLM(prompt, opts));
 }
 
 async function verifySameTopic(topic, candidateTitle) {
@@ -726,6 +891,110 @@ Deno.serve(async (req) => {
         await analyzeTextFlags(supabaseAdmin, post).catch(() => {});
       }
       return new Response(JSON.stringify({ ok: true, refreshed: (posts || []).length }), {
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // 비저너리 수집: refresh-coverage와 같은 이유로 CRON_SECRET 필수(공개 anon 키만으로
+    // 아무나 호출하면 LLM·Yahoo Finance 호출을 무제한 트리거하고, 실존 인물 이름에 잘못된
+    // 발언 기록을 남길 위험도 있다).
+    if (body.action === 'visionary-collect') {
+      const cronSecret = Deno.env.get('CRON_SECRET');
+      if (!cronSecret || req.headers.get('x-cron-secret') !== cronSecret) {
+        return new Response(JSON.stringify({ error: 'unauthorized' }), {
+          status: 401, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        });
+      }
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL'),
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
+      );
+      const benchmark = await yfQuote('^KS11');
+      if (!benchmark) {
+        return new Response(JSON.stringify({ error: '벤치마크 시세 조회 실패' }), {
+          status: 502, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        });
+      }
+      const statementDate = kstDateStr();
+      let checked = 0, inserted = 0;
+      for (const ch of VISIONARY_CHANNELS) {
+        const videos = await fetchChannelVideos(ch.channelId, 3);
+        for (const v of videos) {
+          checked++;
+          const cls = await classifyVideo(v.title, v.description);
+          if (!cls) continue;
+
+          const resolved = resolveTicker(cls.target) || ['코스피', '^KS11'];
+          const [targetLabel, ticker] = resolved;
+          const q = await yfQuote(ticker);
+          if (!q) continue;
+
+          const horizon = VISIONARY_HORIZON_DAYS[cls.horizon] ? cls.horizon : 'short';
+          const judgeDate = tradingDaysAfterKST(statementDate, VISIONARY_HORIZON_DAYS[horizon]);
+          const row = {
+            influencer_name: ch.name,
+            statement: (cls.statement || v.title).slice(0, 500),
+            statement_date: statementDate,
+            direction: cls.direction,
+            target_label: targetLabel,
+            ticker,
+            benchmark_ticker: '^KS11',
+            horizon_label: VISIONARY_HORIZON_LABEL[horizon],
+            judge_date: judgeDate,
+            price_at_call: q.price,
+            benchmark_price_at_call: benchmark.price,
+            status: 'pending',
+            source_url: `https://www.youtube.com/watch?v=${v.videoId}`,
+            video_id: v.videoId,
+          };
+          // video_id unique 제약 위반(23505)이면 이미 처리된 영상이라는 뜻 -- 정상, 그냥 건너뜀.
+          const { error } = await supabaseAdmin.from('visionary_calls').insert(row);
+          if (!error) inserted++;
+        }
+      }
+      return new Response(JSON.stringify({ ok: true, checked, inserted }), {
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (body.action === 'visionary-judge') {
+      const cronSecret = Deno.env.get('CRON_SECRET');
+      if (!cronSecret || req.headers.get('x-cron-secret') !== cronSecret) {
+        return new Response(JSON.stringify({ error: 'unauthorized' }), {
+          status: 401, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        });
+      }
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL'),
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
+      );
+      const today = kstDateStr();
+      const { data: rows, error: rowsError } = await supabaseAdmin.from('visionary_calls').select('*')
+        .eq('status', 'pending').lte('judge_date', today);
+      if (rowsError) throw rowsError;
+
+      const benchmarkCache = {};
+      let judged = 0;
+      for (const row of rows || []) {
+        const q = await yfQuote(row.ticker);
+        if (!q || row.price_at_call == null) continue;
+        const bt = row.benchmark_ticker || '^KS11';
+        if (!(bt in benchmarkCache)) benchmarkCache[bt] = await yfQuote(bt);
+        const bq = benchmarkCache[bt];
+        if (!bq || row.benchmark_price_at_call == null) continue;
+
+        const assetReturn = (q.price - row.price_at_call) / row.price_at_call * 100;
+        const hit = row.direction === 'up' ? assetReturn > 0 : assetReturn < 0;
+        const benchmarkReturn = (bq.price - row.benchmark_price_at_call) / row.benchmark_price_at_call * 100;
+        const { error: updErr } = await supabaseAdmin.from('visionary_calls').update({
+          price_at_judge: q.price,
+          benchmark_price_at_judge: bq.price,
+          benchmark_return_pct: benchmarkReturn,
+          status: hit ? 'hit' : 'miss',
+        }).eq('id', row.id);
+        if (!updErr) judged++;
+      }
+      return new Response(JSON.stringify({ ok: true, judged }), {
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
       });
     }
