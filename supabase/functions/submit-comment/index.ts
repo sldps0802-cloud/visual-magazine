@@ -1093,6 +1093,34 @@ Deno.serve(async (req) => {
       });
     }
 
+    // 글이 올라오는 순간 바로 타임라인을 만든다 -- 관리자 패널이든 AI 에디터든, 어떤 경로로
+    // posts에 INSERT되든 상관없이 잡아내야 해서 클라이언트(관리자 패널) 쪽에 훅을 심는 대신
+    // Supabase Database Webhook(테이블: posts, 이벤트: Insert)이 이 액션을 직접 호출하게
+    // 한다. 웹훅 기본 payload 모양 그대로({type,table,record,...}) 받고, 수동 테스트용으로
+    // {action:'timeline-single', post_id}도 같이 받아준다. refresh-coverage의 정기 스윕과
+    // 중복 실행돼도 post_timeline_status가 이미 처리된 글은 즉시 걸러내므로 무해하다.
+    if ((body.type === 'INSERT' && body.table === 'posts' && body.record) || body.action === 'timeline-single') {
+      const cronSecret = Deno.env.get('CRON_SECRET');
+      if (!cronSecret || req.headers.get('x-cron-secret') !== cronSecret) {
+        return new Response(JSON.stringify({ error: 'unauthorized' }), {
+          status: 401, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        });
+      }
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL'),
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
+      );
+      let post = body.record || null;
+      if (!post && body.post_id) {
+        const { data } = await supabaseAdmin.from('posts').select('id,title,created_at').eq('id', body.post_id).maybeSingle();
+        post = data;
+      }
+      if (post) await refreshTimelineForPost(supabaseAdmin, post).catch(() => {});
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    }
+
     // 비저너리 수집: refresh-coverage와 같은 이유로 CRON_SECRET 필수(공개 anon 키만으로
     // 아무나 호출하면 LLM·Yahoo Finance 호출을 무제한 트리거하고, 실존 인물 이름에 잘못된
     // 발언 기록을 남길 위험도 있다).
