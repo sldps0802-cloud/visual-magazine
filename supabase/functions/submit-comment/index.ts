@@ -16,7 +16,6 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 const VPN_LIST_URL = 'https://raw.githubusercontent.com/X4BNet/lists_vpn/main/output/vpn/ipv4.txt';
 const COUNTRY_IPV4_URL = 'https://github.com/sapics/ip-location-db/releases/download/latest/user-country-ipv4.csv';
 const COUNTRY_IPV6_URL = 'https://github.com/sapics/ip-location-db/releases/download/latest/user-country-ipv6.csv';
-const SERVER_IPV4_URL = 'https://github.com/sapics/ip-location-db/releases/download/latest/server-country-ipv4.csv';
 const SERVER_IPV6_URL = 'https://github.com/sapics/ip-location-db/releases/download/latest/server-country-ipv6.csv';
 
 const CORS_HEADERS = {
@@ -35,8 +34,7 @@ function ipv4ToInt(ip) {
 let vpnRanges = null; // sorted [startInt, endInt][]
 let countryRangesV4 = null; // sorted [startInt, endInt, code][]
 let countryRangesV6 = null; // sorted [startBig, endBig, code][] (BigInt)
-let serverRangesV4 = null; // sorted [startInt, endInt, code][] - datacenter/hosting IPv4 (VPN/proxy signal)
-let serverRangesV6 = null; // sorted [startBig, endBig, code][] (BigInt) - same, IPv6
+let serverRangesV6 = null; // sorted [startBig, endBig, code][] (BigInt) - datacenter/hosting IPv6 (VPN/proxy signal)
 let loadingPromise = null;
 
 function parseCidrLine(line) {
@@ -57,17 +55,15 @@ function parseIpv4RangeCsv(text) {
 }
 
 async function loadDatasets() {
-  if (vpnRanges && countryRangesV4 && serverRangesV4) return;
+  if (vpnRanges && countryRangesV4) return;
   if (loadingPromise) return loadingPromise;
   loadingPromise = (async () => {
-    const [vpnText, countryV4Text, serverV4Text] = await Promise.all([
+    const [vpnText, countryV4Text] = await Promise.all([
       fetch(VPN_LIST_URL).then((r) => r.text()),
       fetch(COUNTRY_IPV4_URL).then((r) => r.text()),
-      fetch(SERVER_IPV4_URL).then((r) => r.text()),
     ]);
     vpnRanges = vpnText.split('\n').map(parseCidrLine).filter(Boolean).sort((a, b) => a[0] - b[0]);
     countryRangesV4 = parseIpv4RangeCsv(countryV4Text);
-    serverRangesV4 = parseIpv4RangeCsv(serverV4Text);
     // ipv6 dbs are fetched lazily on first ipv6 request, not on every cold start
   })();
   await loadingPromise;
@@ -157,11 +153,16 @@ async function classifyIp(ip) {
   }
   const value = ipv4ToInt(ip);
   if (value === null) return { prefix: null, country: null, isVpn: false };
+  // IPv4는 X4BNet VPN 목록만으로 판별한다 -- server-country(데이터센터/호스팅 대역) 데이터셋도
+  // 같이 썼었는데, 국가 단위로 뭉뚱그려 놓은 탓에 한국 KT 대역(14.32.0.0~14.95.255.255,
+  // 순수 가정용/모바일 고객 IP도 잔뜩 포함된 구간)까지 "서버"로 오분류해서 VPN 안 쓰는
+  // 실사용자를 막아버렸다(실측 확인: 14.47.94.44 -- 실제 X4BNet 목록엔 없는데
+  // server-country에선 KR 서버로 잡힘). ISP 대역을 이렇게 뭉뚱그리는 데이터셋은
+  // 신뢰할 수 없어서 뺐다.
   const isKnownVpn = !!binarySearchRange(vpnRanges, value);
-  const isServerHost = !!binarySearchRange(serverRangesV4, value);
   const match = binarySearchRange(countryRangesV4, value);
   const parts = ip.split('.');
-  return { prefix: parts[0] + '.' + parts[1], country: match ? match[2] : null, isVpn: isKnownVpn || isServerHost };
+  return { prefix: parts[0] + '.' + parts[1], country: match ? match[2] : null, isVpn: isKnownVpn };
 }
 
 /* ---- 비저너리 승률 랭킹 계산: 원래 fortune_site/index.html 클라이언트 JS에 있던 로직을
