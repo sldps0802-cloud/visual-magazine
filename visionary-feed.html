@@ -11,6 +11,14 @@
     font-weight:600;
     font-display:swap;
   }
+  /* --up-pct를 숫자로 등록해야(@property) 값이 바뀔 때 순간이동이 아니라 CSS transition으로
+     부드럽게 밀렸다 당겨졌다 한다 -- 표가 새로 들어와서 비율이 바뀔 때 알약의 색 경계가
+     "앞으로 갔다가 밀리기도" 하는 느낌은 이걸 등록해야만 애니메이션된다. */
+  @property --up-pct{
+    syntax:'<number>';
+    inherits:true;
+    initial-value:50;
+  }
   :root{
     --gold:#ffcf8a;
     --amber:#e8823c;
@@ -26,6 +34,7 @@
     /* 투표율에 따라 카드/동전 게이트 주변 은은한 빛의 밝기가 바뀐다(JS가 갱신) */
     --up-glow:.16;
     --down-glow:.16;
+    --up-pct:50; /* 알약 안 긍정/부정 경계 위치(%) -- 표가 몰린 쪽으로 밀린다 */
   }
   :root[data-theme="light"]{
     --gold:#c97a2e;
@@ -97,9 +106,19 @@
   }
   .vote-label{font-size:12px;color:var(--text-muted);margin-bottom:6px;}
   .vote-question{font-size:18px;font-weight:800;margin-bottom:20px;}
+  /* 알약 안 긍정/부정 경계: 딱 갈라지는 선이 아니라 중간에 두 색이 섞인 구간을 넓게 둬서
+     바깥(각 색의 순색 쪽)으로 갈수록 진하고 경계로 갈수록 옅게 섞이도록 흐리게 처리했다.
+     경계 위치(--up-pct)는 실제 투표 비율이라, 표가 몰린 쪽으로 경계 자체가 밀려난다 --
+     위에서 @property로 등록해둔 덕에 비율이 바뀔 때 순간이동이 아니라 부드럽게 밀린다. */
   .vote-pill{
     display:flex;border-radius:999px;overflow:hidden;margin-bottom:14px;
-    background:linear-gradient(135deg, var(--up), var(--down));
+    background:linear-gradient(135deg,
+      var(--up) 0%,
+      color-mix(in srgb, var(--up) 65%, var(--down)) calc(var(--up-pct) * 1% - 20%),
+      color-mix(in srgb, var(--up) 35%, var(--down)) calc(var(--up-pct) * 1% + 20%),
+      var(--down) 100%
+    );
+    transition:--up-pct .7s ease-out;
   }
   .vote-half{
     flex:1;padding:16px 12px;font-family:inherit;cursor:pointer;
@@ -502,6 +521,8 @@
     var root = document.documentElement;
     root.style.setProperty('--up-glow', (0.12 + upPct / 100 * 0.32).toFixed(2));
     root.style.setProperty('--down-glow', (0.12 + downPct / 100 * 0.32).toFixed(2));
+    // 알약 안 색 경계 위치도 같은 비율로 밀어준다 -- 표가 많이 몰린 쪽 색이 더 넓게 차지한다.
+    root.style.setProperty('--up-pct', upPct);
   }
 
   function renderCamps(up, down){

@@ -247,6 +247,54 @@
   .skipped-meta{font-size:12px;color:var(--text-muted);}
   .chevron{color:var(--text-muted);flex:none;margin-top:2px;}
 
+  /* ---- 사건 타임라인: '엇갈린 시선'처럼 크고 화려한 배너가 아니라, 본문 읽기 전에
+     맥락만 슬쩍 알려주는 얇은 한 줄 배너로 둔다 -- 이게 이 카드보다 위에 있는 이유는,
+     "다 읽고 나서" 맥락을 아는 건 이미 늦기 때문. 접힌 상태 자체가 정보량을 갖게(연도·
+     개수) 만들어서, 펼치지 않아도 "내가 모르는 배경이 있구나"는 바로 판단되게 한다. ---- */
+  .timeline-accordion{width:100%;text-align:left;margin-bottom:16px;}
+  .timeline-summary{
+    display:flex;align-items:center;gap:10px;
+    padding:13px 16px;border-radius:12px;
+    background:var(--surface);border:1px solid var(--surface-border);
+    transition:filter .15s ease-out;
+  }
+  .timeline-summary:hover{filter:brightness(1.08);}
+  .timeline-summary-icon{flex:none;color:var(--amber);display:flex;}
+  .timeline-summary-text{flex:1;min-width:0;font-size:13px;color:var(--text);line-height:1.4;}
+  .timeline-summary-chevron{flex:none;color:var(--text-muted);transition:transform .2s ease-out;}
+  .timeline-accordion[open] .timeline-summary-chevron{transform:rotate(180deg);}
+  .timeline-detail{
+    margin-top:10px;padding:18px 18px 4px;
+    background:var(--surface);border:1px solid var(--surface-border);border-radius:14px;
+  }
+  .timeline-list{list-style:none;}
+  .timeline-item{position:relative;padding:0 0 22px 24px;}
+  .timeline-item:last-child{padding-bottom:14px;}
+  .timeline-item::before{ /* 세로 연결선 */
+    content:'';position:absolute;left:4px;top:15px;bottom:-7px;width:2px;
+    background:var(--surface-border);
+  }
+  .timeline-item:last-child::before{display:none;}
+  .timeline-dot{
+    position:absolute;left:0;top:4px;width:10px;height:10px;border-radius:50%;
+    background:var(--bg-mid);border:2px solid var(--text-muted);
+  }
+  .timeline-item.current .timeline-dot{
+    background:var(--amber);border-color:var(--amber);
+    box-shadow:0 0 0 4px color-mix(in srgb, var(--amber) 22%, transparent);
+  }
+  .timeline-current-badge{
+    display:inline-block;font-size:11px;font-weight:700;color:var(--amber);
+    background:color-mix(in srgb, var(--amber) 16%, transparent);
+    padding:2px 8px;border-radius:999px;margin-bottom:5px;
+  }
+  .timeline-date{font-size:11.5px;color:var(--text-muted);margin-bottom:3px;}
+  .timeline-item.current .timeline-date{color:var(--amber);font-weight:700;}
+  .timeline-event-text{font-size:14px;line-height:1.55;color:var(--text);}
+  .timeline-item.current .timeline-event-text{font-weight:800;}
+  .timeline-source-name{color:var(--text-muted);font-weight:400;}
+  .timeline-source-link{display:block;margin-top:5px;font-size:12px;font-weight:600;color:var(--amber);}
+
   /* ---- soft nudge from 엇갈린 시선 toward 놓친 이야기 ---- */
   /* 배경은 라이트/다크 둘 다 자연스럽게 - 강제로 어둡게 고정했더니 화이트 모드에서 붕 뜨는 검은 박스처럼 보였음 */
   .wc-popup{
@@ -445,6 +493,7 @@
     var metaEl = document.createElement('div');
     metaEl.className = 'meta';
     metaEl.textContent = post.author_email ? (post.author_email + ' · ' + date) : date;
+    var timelineEl = document.createElement('div');
     var divideEl = document.createElement('div');
     divideEl.innerHTML =
       '<details class="divide" data-topic="' + wcEscape(post.title) + '">' +
@@ -484,6 +533,9 @@
     });
     main.appendChild(titleEl);
     main.appendChild(metaEl);
+    // 타임라인을 '엇갈린 시선'보다 위에 둔다 -- 본문을 읽기 "전에" 배경을 알아야 의미가 있고,
+    // 다 읽고 나서 아는 건 이미 늦다.
+    main.appendChild(timelineEl);
     main.appendChild(divideEl);
     var wcPopup = document.createElement('div');
     wcPopup.className = 'wc-popup';
@@ -522,6 +574,7 @@
     document.title = post.title + ' · 비주얼매거진';
 
     wireWorldCoverage(post, main.querySelector('.divide'));
+    tlLoadTimeline(post.id).then(function(rows){ wireTimeline(timelineEl, rows); });
     wireReadingReveal();
     wireComments(post);
     wireTextFlags(post, bodyEl);
@@ -923,6 +976,55 @@
         }).join('') +
         '</ul>' +
       '</div>';
+  }
+
+  /* ---- 사건 타임라인: 서버(refresh-coverage 크론)가 미리 계산해 post_timeline에 저장해둔
+     걸 읽기만 한다 -- world-coverage와 같은 "미리 계산, 페이지는 읽기만" 패턴. 글마다 딱
+     한 번만 시도되므로(post_timeline_status로 처리 여부 기록), 행이 없으면 "아직 확인
+     안 됨"과 "배경사건이 실제로 없음"을 구분하지 않고 그냥 아무것도 안 띄운다 -- 억지로
+     빈 배너를 보여주는 것보다 조용히 없는 게 낫다. ---- */
+  function tlLoadTimeline(postId){
+    return db.from('post_timeline').select('*').eq('post_id', postId).order('event_date', { ascending: true }).then(function(res){
+      return res.data || [];
+    });
+  }
+  function tlDateLabel(dateStr){
+    var d = new Date(dateStr + 'T00:00:00');
+    return d.getFullYear() + '년 ' + (d.getMonth() + 1) + '월 ' + d.getDate() + '일';
+  }
+  function tlRelativeTime(dateStr){
+    var d = new Date(dateStr + 'T00:00:00');
+    var now = new Date();
+    var months = (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth());
+    if(months <= 0) return '이번 달';
+    if(months < 12) return months + '개월 전';
+    return Math.floor(months / 12) + '년 전';
+  }
+  function wireTimeline(container, rows){
+    if(!rows || rows.length === 0){ container.remove(); return; } // 배경사건이 없으면 아예 안 띄움
+    var history = rows.filter(function(r){ return !r.is_current; });
+    var earliestYear = Math.min.apply(null, history.map(function(r){ return new Date(r.event_date).getFullYear(); }));
+    container.innerHTML =
+      '<details class="timeline-accordion">' +
+        '<summary class="timeline-summary">' +
+          '<span class="timeline-summary-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg></span>' +
+          '<span class="timeline-summary-text"><b>' + earliestYear + '년</b>부터 이어져 온 사건이에요 · 주요 분기점 ' + history.length + '개</span>' +
+          '<span class="timeline-summary-chevron"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>' +
+        '</summary>' +
+        '<div class="timeline-detail"><ul class="timeline-list">' +
+          rows.map(function(r){
+            return '<li class="timeline-item' + (r.is_current ? ' current' : '') + '">' +
+              '<span class="timeline-dot"></span>' +
+              (r.is_current ? '<div class="timeline-current-badge">지금 읽는 기사</div>' : '') +
+              '<div class="timeline-date">' + tlDateLabel(r.event_date) + ' · ' + tlRelativeTime(r.event_date) + '</div>' +
+              '<div class="timeline-event-text">' + wcEscape(r.summary) +
+                (r.source ? ' <span class="timeline-source-name">(' + wcEscape(r.source) + ')</span>' : '') +
+              '</div>' +
+              (r.source_url ? '<a class="timeline-source-link" href="' + wcSafeHref(r.source_url) + '" target="_blank" rel="noopener">원문 보기 →</a>' : '') +
+            '</li>';
+          }).join('') +
+        '</ul></div>' +
+      '</details>';
   }
 
   function wireWorldCoverage(post, divideEl){

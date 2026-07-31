@@ -612,6 +612,24 @@ async function callVisionaryLLM(prompt, opts = {}) {
   return (await callOpenRouter(prompt, opts)) || (await callLLM(prompt, opts));
 }
 
+// 사건 타임라인도 같은 이유(다른 기능과 무료 쿼터를 나눠 쓰면 한쪽이 몰릴 때 다른 쪽이
+// 조용히 fail-open됨)로 완전히 별도 계정을 쓴다. Cloudflare Workers AI는 계정당 하루
+// 10,000 뉴런이 무료(유료 플랜 불필요, 매일 00:00 UTC 리셋)이고, /ai/v1/chat/completions가
+// 이미 OpenAI 호환 형식이라 callOpenAiChat을 그대로 재사용한다. CLOUDFLARE_ACCOUNT_ID·
+// CLOUDFLARE_API_TOKEN이 없으면 기존 체인으로 조용히 폴백(설정 안 해도 동작).
+async function callCloudflare(prompt, opts) {
+  const accountId = Deno.env.get('CLOUDFLARE_ACCOUNT_ID');
+  const token = Deno.env.get('CLOUDFLARE_API_TOKEN');
+  if (!accountId || !token) return null;
+  return callOpenAiChat(
+    `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1/chat/completions`,
+    token, '@cf/meta/llama-3.1-8b-instruct', prompt, opts,
+  );
+}
+async function callTimelineLLM(prompt, opts = {}) {
+  return (await callCloudflare(prompt, opts)) || (await callLLM(prompt, opts));
+}
+
 async function verifySameTopic(topic, candidateTitle) {
   const prompt =
     '다음 두 제목이 같은 구체적인 사건을 다루고 있는지 확인하세요. 단어가 겹쳐도 동명이인·동음이의어 때문에 ' +
@@ -745,6 +763,143 @@ async function refreshClaimsForPost(supabase, post, matchedResults) {
     };
   });
   await supabase.from('world_coverage_claims').insert(rows);
+}
+
+/* ---- 사건 타임라인: 기사가 다루는 사건이 더 큰 흐름의 일부일 때(예: "우크라이나가 이란
+   선박을 공격" 앞에 "이란이 러시아에 드론을 지원했다"는 배경이 있음), 그 전후 맥락을 시간순
+   으로 보여준다. world-coverage와 같은 RSS/번역/LLM 부품을 재사용하지만 목적이 다르다 --
+   world-coverage는 "같은 사건을 누가 다뤘나"(같은 날짜), 타임라인은 "이 사건 이전에 뭐가
+   있었나"(다른 날짜, 최대 2년 전까지). 날짜는 LLM이 절대 만들어내지 않는다 -- 전부 RSS
+   pubDate 원본에서 가져오고, LLM은 후보 중 "고르기"와 "한 줄 요약"만 담당한다. ---- */
+const TIMELINE_MARKETS = [
+  { hl: 'ko', gl: 'KR', ceid: 'KR:ko' },
+  { hl: 'en-US', gl: 'US', ceid: 'US:en' },
+];
+// 기사 시점을 기준으로 뒤로 갈수록 넓은 구간을 본다(최근 1개월 ~ 2년 전까지, 서로 안 겹치는
+// 5개 구간) -- 한 번에 길게 검색하면 최신 기사만 잔뜩 잡히고 오래된 발단은 묻혀버려서,
+// 구간을 쪼개야 오래된 사건도 골고루 후보에 오른다.
+const TIMELINE_WINDOWS = [
+  { fromDays: 0, toDays: 30 },
+  { fromDays: 30, toDays: 90 },
+  { fromDays: 90, toDays: 180 },
+  { fromDays: 180, toDays: 365 },
+  { fromDays: 365, toDays: 730 },
+];
+function tlWindowDates(anchorDateStr, fromDays, toDays) {
+  const anchor = new Date(anchorDateStr + 'T00:00:00Z').getTime();
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  return {
+    before: new Date(anchor - fromDays * DAY_MS).toISOString().slice(0, 10),
+    after: new Date(anchor - toDays * DAY_MS).toISOString().slice(0, 10),
+  };
+}
+async function tlFetchWindow(topic, market, after, before) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const q = topic + ' after:' + after + ' before:' + before;
+    const r = await fetch(wcGoogleFeedUrl(q, market), {
+      signal: ctrl.signal,
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VisualMagazineBot/1.0)' },
+    });
+    const text = await r.text();
+    return wcParseXml(text).slice(0, 6); // 구간 하나당 후보는 최대 6개까지만
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+// 반환값(boolean)은 "이번 호출에서 실제로 새 작업을 했는지"다 -- 이미 처리된 글이면 false를
+// 돌려줘서, 호출부가 예산(한 번에 몇 개 글까지)을 이미-끝난 글로 낭비하지 않게 한다.
+async function refreshTimelineForPost(supabase, post) {
+  const rawTitle = post.title || '';
+  if (wcTokenize(rawTitle).length === 0) return false;
+
+  // 글 하나당 딱 한 번만 시도한다 -- RSS로 배경사건이 하나도 안 나온 글도 event_count:0으로
+  // 기록해서, 매번 다시 헛수고로 검색하지 않는다. 다시 시도하려면 이 행을 지우면 됨.
+  const { data: existingStatus } = await supabase.from('post_timeline_status')
+    .select('post_id').eq('post_id', post.id).maybeSingle();
+  if (existingStatus) return false;
+
+  const topic = await wcExtractTopic(rawTitle);
+  const anchorDate = new Date(post.created_at).toISOString().slice(0, 10);
+
+  const perSlot = await Promise.all(
+    TIMELINE_WINDOWS.flatMap((w) => {
+      const { after, before } = tlWindowDates(anchorDate, w.fromDays, w.toDays);
+      return TIMELINE_MARKETS.map(async (market) => {
+        const items = await tlFetchWindow(topic, market, after, before);
+        return items.map((item) => ({ item, market }));
+      });
+    }),
+  );
+  const found = perSlot.flat();
+
+  // 제목 기준 중복 제거 -- 같은 사건을 여러 매체·언어권이 동시에 다뤘을 수 있음
+  const seen = new Set();
+  const deduped = [];
+  for (const entry of found) {
+    if (!entry.item.title || !entry.item.pubDate) continue;
+    const key = entry.item.title.toLowerCase().replace(/\s+/g, ' ').trim();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(entry);
+  }
+
+  // 후보가 너무 적으면(진짜 배경사건이 없거나 검색이 안 걸림) LLM 호출 없이 "없음"으로 기록하고
+  // 끝낸다 -- 억지로 타임라인을 채우는 것보다, 자신 없으면 아예 안 보여주는 게 낫다.
+  if (deduped.length < 2) {
+    await supabase.from('post_timeline_status').insert({ post_id: post.id, event_count: 0 });
+    return true;
+  }
+
+  const candidates = deduped.slice(0, 25);
+  const listing = candidates.map((c, i) =>
+    '[' + i + '] ' + new Date(c.item.pubDate).toISOString().slice(0, 10) + ' - ' + c.item.title
+  ).join('\n');
+  const prompt =
+    '다음은 "' + rawTitle + '" 기사와 관련된 과거 보도 후보 목록입니다(번호, 날짜, 제목).\n\n' + listing +
+    '\n\n이 중에서 이 사건의 전후 맥락을 이해하는 데 정말 중요한 분기점만 5~8개 고르세요' +
+    '(단순 후속보도·중복·무관한 기사는 빼세요). 각각을 한국어 한 문장으로 짧게 요약하세요' +
+    '(날짜는 이미 있으니 요약 문장에 다시 쓰지 마세요). ' +
+    '반드시 다음 JSON 형식으로만 답하세요: {"picked":[{"index":0,"summary":"..."}]}';
+  const answer = await callTimelineLLM(prompt, { json: true, temperature: 0.1, maxTokens: 700 });
+
+  let picked = [];
+  if (answer) {
+    try {
+      const parsed = JSON.parse(answer);
+      picked = Array.isArray(parsed.picked) ? parsed.picked : [];
+    } catch { /* picked는 빈 배열로 남음 */ }
+  }
+
+  const rows = [];
+  for (const p of picked) {
+    const c = candidates[p?.index];
+    if (!c) continue;
+    // 실제 날짜는 항상 RSS pubDate에서 가져온다 -- LLM이 준 날짜는 절대 안 믿는다(애초에
+    // 프롬프트에서 요약에 날짜를 다시 쓰지 말라고 했지만, 혹시 썼더라도 무시함).
+    const eventDate = new Date(c.item.pubDate).toISOString().slice(0, 10);
+    if (eventDate >= anchorDate) continue; // 기사 시점 이후는 "배경"이 아니므로 제외
+    rows.push({
+      post_id: post.id,
+      event_date: eventDate,
+      summary: String(p.summary || c.item.title).slice(0, 200),
+      source: c.item.source || null,
+      source_url: /^https?:\/\//i.test(c.item.link || '') ? c.item.link : null,
+      is_current: false,
+    });
+  }
+
+  if (rows.length > 0) {
+    // 지금 읽는 기사 자신도 타임라인 마지막 마디로 넣는다 -- "내가 지금 보는 기사가 이
+    // 흐름의 어디쯤인지" 보여주는 게 이 기능의 핵심이라, 배경사건이 있을 때만 같이 넣는다.
+    rows.push({ post_id: post.id, event_date: anchorDate, summary: rawTitle, source: null, source_url: null, is_current: true });
+    await supabase.from('post_timeline').insert(rows);
+  }
+  await supabase.from('post_timeline_status').insert({ post_id: post.id, event_count: rows.length });
+  return true;
 }
 
 /* ---- 감정적/자극적 표현, 기자 주관이 담긴 표현 표시.
@@ -920,12 +1075,18 @@ Deno.serve(async (req) => {
       const { data: posts, error: postsError } = await supabaseAdmin.from('posts').select('id,title,created_at');
       if (postsError) throw postsError;
       const DAY_MS = 24 * 60 * 60 * 1000;
+      // 타임라인은 world-coverage와 달리 글 나이 상관없이 언젠가 한 번만 처리하면 되지만,
+      // 밀린 글이 많을 때 한 번의 호출에서 전부 다 시도하면 RSS 검색(구간x언어 조합)이
+      // 쌓여서 150초 유휴 타임아웃에 걸릴 수 있다(비저너리에서 실측했던 것과 같은 문제) --
+      // 한 번에 최대 3개 글까지만 새로 처리하고, 나머지는 다음 호출 때 이어서 처리한다.
+      let timelineBudget = 3;
       for (const post of posts || []) {
         // 게시 24시간 지난 글은 그 시점 이후로 새로 다룬 언론사가 더 나올 가능성이 낮아서 검색을 그만둠
         // (LLM 호출도 아끼고, 오래된 글까지 매번 다시 검색하느라 갱신 주기가 늘어지는 것도 방지)
         const ageMs = Date.now() - new Date(post.created_at).getTime();
         if (ageMs <= DAY_MS) await refreshCoverageForPost(supabaseAdmin, post);
         await analyzeTextFlags(supabaseAdmin, post).catch(() => {});
+        if (timelineBudget > 0 && await refreshTimelineForPost(supabaseAdmin, post).catch(() => false)) timelineBudget--;
       }
       return new Response(JSON.stringify({ ok: true, refreshed: (posts || []).length }), {
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
