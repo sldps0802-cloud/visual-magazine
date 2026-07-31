@@ -65,19 +65,27 @@
   .page-title{font-size:26px;font-weight:800;margin-bottom:6px;}
   .page-sub{font-size:13px;color:var(--text-muted);margin-bottom:28px;line-height:1.6;}
 
+  /* 은행 앱 계좌 카드 참고: 이름/발언 + 오른쪽 수익률 알약.
+     배경은 상승(빨강)/하락(파랑) 대각선 그라데이션 -- 한국 증시 색 관례 그대로. */
   .feed-list{list-style:none;}
-  .feed-row{padding:16px 0;border-bottom:1px solid var(--surface-border);}
-  .feed-row:last-child{border-bottom:none;}
-  .feed-top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:4px;}
-  .feed-name{font-weight:800;font-size:14px;}
-  .feed-rate{font-weight:800;font-size:14px;flex:none;}
-  .feed-rate.pos{color:#7dd88a;}
-  .feed-rate.neg{color:var(--amber);}
-  .feed-pending{flex:none;font-size:12px;color:var(--text-muted);}
-  .feed-statement{font-size:14px;line-height:1.6;color:var(--text);}
+  .feed-row{
+    display:flex;align-items:center;gap:14px;
+    padding:16px;margin-bottom:10px;border-radius:16px;
+    background:var(--surface);border:1px solid var(--surface-border);
+  }
+  .feed-row:last-child{margin-bottom:0;}
+  .feed-row.dir-up{background:linear-gradient(135deg, color-mix(in srgb, #e5484d 18%, transparent), transparent 70%), var(--surface);}
+  .feed-row.dir-down{background:linear-gradient(135deg, color-mix(in srgb, #3b82f6 18%, transparent), transparent 70%), var(--surface);}
+  .feed-main{flex:1;min-width:0;}
+  .feed-name{font-weight:800;font-size:14px;margin-bottom:3px;}
+  .feed-statement{font-size:13px;line-height:1.5;color:var(--text-muted);}
+  .feed-rate{font-weight:800;flex:none;font-size:13px;padding:6px 12px;border-radius:999px;background:var(--surface);border:1px solid var(--surface-border);}
+  .feed-rate.pos{color:#ff6b6f;}
+  .feed-rate.neg{color:#5b9bff;}
+  .feed-pending{flex:none;font-size:12px;color:var(--text-muted);padding:6px 12px;border-radius:999px;background:var(--surface);border:1px solid var(--surface-border);}
   .feed-dir{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;margin-left:6px;vertical-align:middle;}
-  .feed-dir.up{background:color-mix(in srgb, #7dd88a 20%, transparent);color:#7dd88a;}
-  .feed-dir.down{background:color-mix(in srgb, var(--amber) 20%, transparent);color:var(--amber);}
+  .feed-row.dir-up .feed-dir{background:color-mix(in srgb, #e5484d 24%, transparent);color:#ff6b6f;}
+  .feed-row.dir-down .feed-dir{background:color-mix(in srgb, #3b82f6 24%, transparent);color:#5b9bff;}
 
   .note{font-size:12px;line-height:1.7;color:var(--text-muted);margin-top:28px;padding-top:20px;border-top:1px solid var(--surface-border);}
   .empty-note{font-size:13px;color:var(--text-muted);padding:16px 0;}
@@ -153,15 +161,15 @@
       return;
     }
     list.innerHTML = rows.map(function(r){
+      var dirClass = r.direction === 'up' ? 'dir-up' : 'dir-down';
       var rateHtml = r.excessReturn == null
         ? '<span class="feed-pending">판정 전</span>'
         : '<span class="feed-rate ' + (r.excessReturn >= 0 ? 'pos' : 'neg') + '">' +
             (r.excessReturn >= 0 ? '+' : '') + r.excessReturn.toFixed(1) + '%</span>';
-      var dirHtml = '<span class="feed-dir ' + (r.direction === 'up' ? 'up' : 'down') + '">' +
-        (r.direction === 'up' ? '간다' : '빠진다') + '</span>';
-      return '<li class="feed-row">' +
-        '<div class="feed-top"><span class="feed-name">' + esc(r.name) + dirHtml + '</span>' + rateHtml + '</div>' +
-        '<div class="feed-statement">' + esc(r.statement) + '</div>' +
+      var dirHtml = '<span class="feed-dir">' + (r.direction === 'up' ? '간다' : '빠진다') + '</span>';
+      return '<li class="feed-row ' + dirClass + '">' +
+        '<div class="feed-main"><div class="feed-name">' + esc(r.name) + dirHtml + '</div><div class="feed-statement">' + esc(r.statement) + '</div></div>' +
+        rateHtml +
       '</li>';
     }).join('');
   }

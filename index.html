@@ -163,14 +163,23 @@
   .visionary-compact .panel-title{margin-bottom:4px;}
   .visionary-compact .panel-sub{margin-bottom:14px;}
   .vc-list{list-style:none;}
-  .vc-row{display:flex;align-items:baseline;gap:8px;padding:8px 0;border-bottom:1px solid var(--surface-border);font-size:13px;}
-  .vc-row:last-child{border-bottom:none;}
-  .vc-statement{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .vc-statement b{font-weight:700;}
-  .vc-rate{font-weight:800;flex:none;font-size:12px;}
-  .vc-rate.pos{color:#7dd88a;}
-  .vc-rate.neg{color:var(--amber);}
-  .vc-pending{flex:none;font-size:11px;color:var(--text-muted);}
+  /* 은행 앱 계좌 카드 참고: 이름/발언 + 오른쪽 수익률 알약.
+     배경은 상승(빨강)/하락(파랑) 대각선 그라데이션 -- 한국 증시 색 관례 그대로. */
+  .vc-row{
+    display:flex;align-items:center;gap:10px;
+    padding:10px;margin-bottom:8px;border-radius:14px;
+    background:var(--surface);border:1px solid var(--surface-border);
+  }
+  .vc-row:last-child{margin-bottom:0;}
+  .vc-row.dir-up{background:linear-gradient(135deg, color-mix(in srgb, #e5484d 18%, transparent), transparent 70%), var(--surface);}
+  .vc-row.dir-down{background:linear-gradient(135deg, color-mix(in srgb, #3b82f6 18%, transparent), transparent 70%), var(--surface);}
+  .vc-main{flex:1;min-width:0;}
+  .vc-name{font-weight:800;font-size:12px;margin-bottom:1px;}
+  .vc-statement{font-size:12px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .vc-rate{font-weight:800;flex:none;font-size:12px;padding:5px 10px;border-radius:999px;background:var(--surface);border:1px solid var(--surface-border);}
+  .vc-rate.pos{color:#ff6b6f;}
+  .vc-rate.neg{color:#5b9bff;}
+  .vc-pending{flex:none;font-size:11px;color:var(--text-muted);padding:5px 10px;border-radius:999px;background:var(--surface);border:1px solid var(--surface-border);}
   .vc-note{font-size:11px;line-height:1.6;color:var(--text-muted);margin-top:14px;}
   .vc-note a{color:var(--amber);}
   .vc-more{display:block;margin-top:12px;font-size:12px;font-weight:700;color:var(--amber);text-align:right;}
@@ -405,12 +414,13 @@
     var list = document.getElementById('vc-list');
     if(!list) return; // 그 사이 반대편(퀴즈)으로 다시 그려졌을 수 있음 -- 조용히 건너뜀
     list.innerHTML = rows.slice(0, 3).map(function(r){
+      var dirClass = r.direction === 'up' ? 'dir-up' : 'dir-down';
       var rateHtml = r.excessReturn == null
         ? '<span class="vc-pending">판정 전</span>'
         : '<span class="vc-rate ' + (r.excessReturn >= 0 ? 'pos' : 'neg') + '">' +
             (r.excessReturn >= 0 ? '+' : '') + r.excessReturn.toFixed(1) + '%</span>';
-      return '<li class="vc-row">' +
-        '<span class="vc-statement"><b>' + esc(r.name) + '</b> · ' + esc(r.statement) + '</span>' +
+      return '<li class="vc-row ' + dirClass + '">' +
+        '<div class="vc-main"><div class="vc-name">' + esc(r.name) + '</div><div class="vc-statement">' + esc(r.statement) + '</div></div>' +
         rateHtml +
       '</li>';
     }).join('');
