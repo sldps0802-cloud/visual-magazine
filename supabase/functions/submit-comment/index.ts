@@ -640,13 +640,18 @@ async function verifySameTopic(topic, candidateTitle) {
   if (answer === null) return true; // 둘 다 응답 없음 - 키워드 매칭 결과로 fail-open
   return answer.toLowerCase().includes('yes');
 }
-async function wcExtractTopic(title) {
+// llmFn을 인자로 받는 이유: world-coverage(refreshCoverageForPost)는 기존 공유 체인
+// (callLLM)을 그대로 쓰고, 타임라인(refreshTimelineForPost)은 완전히 분리된 callTimelineLLM을
+// 쓰게 하기 위해서다 -- 안 그러면 이 함수 하나 때문에 "완전히 분리된 쿼터"라는 애초 요구사항이
+// 깨진다(실측으로 확인함: 낚시성 원제목을 그대로 검색어로 쓰면 구글 뉴스가 0건을 반환한다 --
+// wcExtractTopic이 실패해서 원제목으로 폴백된 게 원인이었음).
+async function wcExtractTopic(title, llmFn) {
   // 제목이 "13만명이 출근을 못해...2차대전 이후 최악"처럼 낚시성/수사적 표현이면 그걸 그대로
   // 번역해서 검색해봤자 외국 매체 검색어로는 안 맞음 - 검색에 쓸 핵심 사건만 짧게 뽑아둠
   const prompt =
     '다음 기사 제목에서 낚시성 표현이나 수사적 질문은 빼고, 뉴스 검색에 바로 쓸 수 있는 핵심 사건만 ' +
     '짧은 구절(5단어 이내)로 뽑으세요. 다른 설명 없이 검색어만 답하세요.\n\n제목: ' + title;
-  const answer = await callLLM(prompt, { maxTokens: 30 });
+  const answer = await (llmFn || callLLM)(prompt, { maxTokens: 30 });
   if (answer === null) return title;
   const extracted = answer.trim().replace(/^["']|["']$/g, '');
   return extracted || title;
@@ -822,7 +827,7 @@ async function refreshTimelineForPost(supabase, post) {
     .select('post_id').eq('post_id', post.id).maybeSingle();
   if (existingStatus) return false;
 
-  const topic = await wcExtractTopic(rawTitle);
+  const topic = await wcExtractTopic(rawTitle, callTimelineLLM);
   const anchorDate = new Date(post.created_at).toISOString().slice(0, 10);
 
   const perSlot = await Promise.all(
