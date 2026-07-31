@@ -151,6 +151,13 @@
   }
   .coin-gate-hint.up{color:var(--up);}
   .coin-gate-hint.down{color:var(--down);}
+  /* 던진 뒤(결과 화면을 보여주는 동안)엔 힌트·안내문·건너뛰기를 조용히 지운다 --
+     결과만 또렷하게 보이게. */
+  .coin-gate.launched .coin-gate-hint,
+  .coin-gate.launched .coin-gate-label,
+  .coin-gate.launched .coin-gate-skip{
+    opacity:0;pointer-events:none;transition:opacity .25s ease-out;
+  }
   /* transform은 CSS transition이 아니라 JS(rAF 스프링 물리)가 매 프레임 직접 갱신한다 --
      CSS transition과 JS가 같은 속성을 동시에 건드리면 서로 다른 타이밍 곡선이 충돌해서
      뚝뚝 끊기는 느낌이 난다. 대신 놓는 순간의 속도를 스프링이 그대로 이어받아서
@@ -173,6 +180,26 @@
     position:relative;z-index:1;font-size:12px;color:var(--text-muted);text-decoration:underline;
     cursor:pointer;background:none;border:none;font-family:inherit;padding:4px;
   }
+  /* 던지고 나면(투표 확정) 코인 자리에 결과를 잠깐 보여주고 -- "내가 어디에 투표했는지"
+     말이 아니라 잠깐의 화면으로 확인시켜준 다음, 1.5초 뒤 원래 페이지로 매끄럽게 넘어간다. */
+  .coin-result{
+    position:absolute;inset:0;z-index:2;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
+    opacity:0;pointer-events:none;transition:opacity .35s ease-out;
+  }
+  .coin-result.show{opacity:1;}
+  .coin-result-badge{
+    width:88px;height:88px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;font-size:38px;
+    box-shadow:0 10px 30px rgba(0,0,0,.35);
+    transform:scale(.4);opacity:0;
+    transition:transform .5s cubic-bezier(.34,1.56,.64,1), opacity .3s ease-out;
+  }
+  .coin-result.show .coin-result-badge{transform:scale(1);opacity:1;}
+  .coin-result-badge.up{background:linear-gradient(135deg, var(--up), color-mix(in srgb, var(--up) 55%, #fff));}
+  .coin-result-badge.down{background:linear-gradient(135deg, var(--down), color-mix(in srgb, var(--down) 55%, #fff));}
+  .coin-result-text{font-size:16px;font-weight:800;opacity:0;transition:opacity .3s ease-out .1s;}
+  .coin-result.show .coin-result-text{opacity:1;}
 
   .panel-title{font-size:17px;font-weight:800;margin-bottom:4px;}
   .panel-sub{font-size:13px;color:var(--text-muted);margin-bottom:16px;}
@@ -259,8 +286,13 @@
   <div class="coin-gate-hint up" id="hint-up">▲ 긍정</div>
   <div class="coin" id="coin">🪙</div>
   <div class="coin-gate-hint down" id="hint-down">▼ 부정</div>
-  <p class="coin-gate-label">동전을 위로 끌어 던지면 긍정, 아래로 내리면 부정에 투표돼요</p>
+  <p class="coin-gate-label" id="coin-gate-label">동전을 위로 끌어 던지면 긍정, 아래로 내리면 부정에 투표돼요</p>
   <button class="coin-gate-skip" id="coin-gate-skip" type="button">나중에 · 그냥 둘러보기</button>
+
+  <div class="coin-result" id="coin-result">
+    <div class="coin-result-badge" id="coin-result-badge"></div>
+    <div class="coin-result-text" id="coin-result-text"></div>
+  </div>
 </div>
 
 <nav>
@@ -650,37 +682,72 @@
       springBack(releaseVelocity());
       resetHints();
     }
+    // 가속하다 감속하는 부드러운 곡선(이동에 사용) -- easeOut 하나만 쓰면 처음에 훅
+    // 튀어나가는 느낌이라 "너무 빠르다"고 느껴진다. 시작도 끝도 완만하게.
+    function easeInOutCubic(t){ return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+
     function launch(dir){
       if(launched) return;
       launched = true;
       dragging = false;
       cancelSpring();
       coin.classList.remove('dragging');
+      gate.classList.add('launched'); // 힌트·안내문 지우고 결과만 또렷하게
       vibrate([14, 30, 14]);
-      burstConfetti(dir);
       resetHints();
 
       if(reduceMotion){
         coin.style.transition = 'opacity .25s ease-out';
         coin.style.opacity = '0';
+        burstConfetti(dir);
+        showResult(dir);
       } else {
-        // 날아가는 동안도 rAF로 직접 그린다(3D 회전 + 늘어짐 + 축소를 한 프레임 안에서
-        // 같이 갱신해야 회전과 사라짐이 어긋나지 않는다 -- Apple이 말하는 "harmony").
-        var startPosY = posY, t0 = null, DURATION = 620;
+        // 던지는 동안: 이동(translateY)은 부드럽게 가속·감속하고(easeInOutCubic), 회전은
+        // 처음부터 끝까지 일정한 속도로 계속 돌려서(선형) "동전이 실제로 도는 게" 눈에
+        // 분명히 보이게 한다. 이동 곡선과 회전 곡선을 일부러 분리했다 -- 둘 다 같은
+        // easeOut을 쓰면 회전도 초반에 몰렸다가 뚝 멈추는 것처럼 보여서 "빨리 끝나버린" 느낌이 난다.
+        var startPosY = posY, t0 = null;
+        var FLY_DURATION = 950;               // 부드럽게 느껴질 만큼 여유 있게
+        var TRAVEL = window.innerHeight * 0.5; // 화면 끝까지 로켓처럼 쏘지 않고 적당히만
+        var SPIN_TURNS = 2.25;                 // 눈에 보이는 회전 수
         var sign = dir === 'up' ? -1 : 1;
+        var confettiFired = false;
         (function frame(t){
           if(t0 == null) t0 = t;
-          var p = Math.min((t - t0) / DURATION, 1);
-          var ease = 1 - Math.pow(1 - p, 3); // easeOutCubic -- 처음에 훅 튀어나가고 서서히 느려짐
-          var y = startPosY + sign * ease * (window.innerHeight * 1.3);
-          paintCoin(y, { tilt: -sign * 26, stretch: 0.1, squeeze: 0.1, spin: sign * ease * 620, opacity: 1 - ease });
-          if(p < 1) requestAnimationFrame(frame);
+          var p = Math.min((t - t0) / FLY_DURATION, 1);
+          var moveEase = easeInOutCubic(p);
+          var y = startPosY + sign * moveEase * TRAVEL;
+          var spin = sign * p * 360 * SPIN_TURNS;               // 등속 회전
+          var wobble = Math.sin(p * Math.PI * SPIN_TURNS) * 6;  // 살짝 흔들리는 느낌(3D 텀블링)
+          var fadeStart = 0.65;
+          var opacity = p < fadeStart ? 1 : 1 - (p - fadeStart) / (1 - fadeStart);
+          paintCoin(y, { tilt: wobble, stretch: 0, squeeze: 0, spin: spin, opacity: opacity });
+          if(!confettiFired && p > 0.08){ confettiFired = true; burstConfetti(dir); } // 던지자마자(살짝의 텀 뒤) 터짐
+          if(p < 1){ requestAnimationFrame(frame); }
+          else { showResult(dir); }
         })(performance.now());
       }
 
-      setTimeout(function(){ gate.classList.add('leaving'); }, 260);
-      setTimeout(function(){ gate.remove(); }, 750);
       castVote(dir); // 투표 완료 시 아래 카드는(이미 그 뒤에서 그려져 있던) picked 모습으로 자동 갱신됨
+    }
+
+    // 어디에 투표했는지 잠깐 보여주고(1.5초) -- 그다음에야 원래 페이지로 매끄럽게(페이드) 넘어간다.
+    // castVote()는 이미 위에서 먼저 호출해뒀기 때문에, 이 1.5초 동안 서버 응답이 오고
+    // 아래 페이지(이미 그 뒤에서 그려져 있음)의 투표 카드도 picked 모습으로 갱신된다.
+    function showResult(dir){
+      var badge = document.getElementById('coin-result-badge');
+      var text = document.getElementById('coin-result-text');
+      var resultEl = document.getElementById('coin-result');
+      badge.className = 'coin-result-badge ' + dir;
+      badge.textContent = dir === 'up' ? '📈' : '📉';
+      text.textContent = dir === 'up' ? '긍정에 투표했어요' : '부정에 투표했어요';
+      text.style.color = dir === 'up' ? 'var(--up)' : 'var(--down)';
+      resultEl.classList.add('show');
+
+      setTimeout(function(){
+        gate.classList.add('leaving'); // 기존 카드 화면으로 부드럽게 페이드
+        setTimeout(function(){ gate.remove(); }, 500);
+      }, 1500);
     }
 
     coin.addEventListener('pointerdown', onPointerDown);
