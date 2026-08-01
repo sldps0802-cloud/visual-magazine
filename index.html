@@ -75,8 +75,9 @@
     -webkit-background-clip:text;background-clip:text;color:transparent;
     animation:shimmer 4s linear infinite;
   }
-  .navlinks{display:flex;gap:22px;font-size:14px;color:var(--text-muted);flex:1;}
-  .navlinks a:hover{color:var(--text);}
+  /* 신문 제호(masthead) 스타일 -- 메뉴 대신 오늘 날짜/시간을 보여준다 */
+  .masthead-meta{flex:1;font-size:13px;color:var(--text-muted);letter-spacing:.01em;}
+  .masthead-meta b{color:var(--text);font-weight:700;}
   .navicons{display:flex;gap:10px;color:var(--text-muted);}
   .navicons .round{
     width:32px;height:32px;border-radius:50%;
@@ -235,7 +236,7 @@
   @media (max-width:760px){
     .feature-grid{grid-template-columns:1fr;}
     .content-grid{grid-template-columns:1fr;}
-    .navlinks{display:none;}
+    .masthead-meta{display:none;}
   }
 </style>
 </head>
@@ -250,22 +251,10 @@
         </g>
       </svg>
     </a>
-    <nav class="navlinks">
-      <a href="#">라이프스타일</a>
-      <a href="#">머니</a>
-      <a href="#">커리어</a>
-      <a href="#">칼럼</a>
-      <a href="visionary-feed.html">비저너리</a>
-    </nav>
+    <div class="masthead-meta"><b>비주얼매거진</b> | <span id="masthead-datetime"></span></div>
     <div class="navicons">
-      <div class="round">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      </div>
       <div class="round" id="theme-toggle" aria-label="테마 전환">
         <svg id="theme-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></svg>
-      </div>
-      <div class="round">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
       </div>
     </div>
   </div>
@@ -320,6 +309,19 @@
   document.getElementById('theme-toggle').addEventListener('click', function(){
     applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
   });
+
+  // 제호 옆 날짜/시간 -- 1분마다 갱신해서 탭을 오래 켜둬도 안 멈춰 보이게
+  (function(){
+    var el = document.getElementById('masthead-datetime');
+    function paint(){
+      var now = new Date();
+      var d = now.toLocaleDateString('ko-KR', { year:'numeric', month:'long', day:'numeric', weekday:'short' });
+      var t = now.toLocaleTimeString('ko-KR', { hour:'numeric', minute:'2-digit' });
+      el.textContent = d + ' ' + t;
+    }
+    paint();
+    setInterval(paint, 60000);
+  })();
   (function(){
     var headerEl = document.querySelector('header');
     var lastY = window.scrollY;

@@ -486,7 +486,8 @@
 
   function renderPost(post){
     main.innerHTML = '';
-    var date = new Date(post.created_at).toLocaleDateString('ko-KR', { year:'numeric', month:'long', day:'numeric' });
+    var date = new Date(post.created_at).toLocaleDateString('ko-KR', { year:'numeric', month:'long', day:'numeric' }) +
+      ' ' + new Date(post.created_at).toLocaleTimeString('ko-KR', { hour:'numeric', minute:'2-digit' });
     var titleEl = document.createElement('h1');
     titleEl.className = 'headline';
     titleEl.textContent = post.title;
