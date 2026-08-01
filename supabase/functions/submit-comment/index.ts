@@ -1069,6 +1069,49 @@ Deno.serve(async (req) => {
     // 전체 글을 순회하며 외부 RSS·LLM(Groq/Cerebras/Gemini) 호출을 대량으로 일으킨다 --
     // 무료 API 한도 소진·DoS성 남용에 그대로 노출돼 있었다. CRON_SECRET 환경변수를 설정하고
     // 호출부(스케줄러)가 같은 값을 x-cron-secret 헤더로 보내야만 통과하게 막는다.
+    // 엇갈린 시선 + 타임라인을 미리 다 채운 뒤에만 글을 공개한다(관리자 패널 저장 버튼이
+    // posts INSERT 직후 이 액션을 기다렸다가 응답을 받으면 화면을 넘어감). CRON_SECRET이
+    // 아니라 호출자의 로그인 세션(JWT)으로 직접 권한을 확인한다 -- 이건 크론이 아니라
+    // 에디터가 글을 쓸 때 브라우저에서 직접 부르는 액션이라 크론 비밀키를 알 필요가 없다.
+    if (body.action === 'prepare-post') {
+      const anonClient = createClient(
+        Deno.env.get('SUPABASE_URL'),
+        Deno.env.get('SUPABASE_ANON_KEY'),
+        { global: { headers: { Authorization: req.headers.get('Authorization') || '' } } },
+      );
+      const { data: isEditor } = await anonClient.rpc('is_approved_editor');
+      if (!isEditor) {
+        return new Response(JSON.stringify({ error: 'unauthorized' }), {
+          status: 401, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL'),
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
+      );
+      const { data: post } = await supabaseAdmin.from('posts').select('id,title,created_at')
+        .eq('id', body.post_id).maybeSingle();
+      if (!post) {
+        return new Response(JSON.stringify({ error: 'post not found' }), {
+          status: 404, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // 둘 중 하나가 실패해도(네트워크 오류 등) 글이 영영 안 뜨면 안 되니, 각각 실패를
+      // 삼키고 그냥 넘어간다 -- 두 함수 다 "찾을 게 없으면 없다고 기록"까지가 정상 종료라,
+      // 진짜 예외만 여기서 막는다.
+      await Promise.all([
+        refreshCoverageForPost(supabaseAdmin, post).catch(() => {}),
+        refreshTimelineForPost(supabaseAdmin, post).catch(() => {}),
+      ]);
+      await supabaseAdmin.from('posts').update({ published: true }).eq('id', post.id);
+
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    }
+
     if (body.action === 'refresh-coverage') {
       const cronSecret = Deno.env.get('CRON_SECRET');
       if (!cronSecret || req.headers.get('x-cron-secret') !== cronSecret) {
