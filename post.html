@@ -533,15 +533,14 @@
     });
     main.appendChild(titleEl);
     main.appendChild(metaEl);
-    // 타임라인을 '엇갈린 시선'보다 위에 둔다 -- 본문을 읽기 "전에" 배경을 알아야 의미가 있고,
-    // 다 읽고 나서 아는 건 이미 늦다.
-    main.appendChild(timelineEl);
     main.appendChild(divideEl);
     var wcPopup = document.createElement('div');
     wcPopup.className = 'wc-popup';
     wcPopup.id = 'wc-popup';
     main.appendChild(wcPopup);
     main.appendChild(bodyEl);
+    // 타임라인을 본문 아래로.
+    main.appendChild(timelineEl);
     var engageEl = document.createElement('div');
     engageEl.innerHTML =
       '<div class="engage-bar">' +
@@ -993,12 +992,15 @@
     return d.getFullYear() + '년 ' + (d.getMonth() + 1) + '월 ' + d.getDate() + '일';
   }
   function tlRelativeTime(dateStr){
+    // 달력상 월 번호 차이(예: 7월→8월)로 계산하면 하루만 지나도 "1개월 전"으로 잘못
+    // 나온다(실제 버그였음: 7/29가 8/1 기준 "1개월 전"으로 표시됨) -- 실제 경과 일수로 계산한다.
     var d = new Date(dateStr + 'T00:00:00');
     var now = new Date();
-    var months = (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth());
-    if(months <= 0) return '이번 달';
-    if(months < 12) return months + '개월 전';
-    return Math.floor(months / 12) + '년 전';
+    var diffDays = Math.floor((now - d) / (24 * 60 * 60 * 1000));
+    if(diffDays <= 0) return '오늘';
+    if(diffDays < 30) return diffDays + '일 전';
+    if(diffDays < 365) return Math.floor(diffDays / 30) + '개월 전';
+    return Math.floor(diffDays / 365) + '년 전';
   }
   function wireTimeline(container, rows){
     if(!rows || rows.length === 0){ container.remove(); return; } // 배경사건이 없으면 아예 안 띄움
