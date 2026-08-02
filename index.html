@@ -92,7 +92,13 @@
     display:grid;grid-template-columns:2fr 1fr;gap:28px;
     margin-bottom:64px;
   }
-  .feature-side-col{display:flex;flex-direction:column;gap:20px;}
+  /* min-width:0 없으면 grid item 기본값(auto)이 자식의 min-content로 정해지는데,
+     비저너리 발언(.vc-statement, white-space:nowrap)이 길면 그 한 줄 너비가 그대로
+     이 칸의 최소 너비가 돼서 grid 전체와 페이지가 화면보다 넓어져버린다(실제 버그:
+     모바일에서 사이트가 확대·일그러져 보임 -- 랜덤으로 비저너리가 뽑히고 발언이 길
+     때만 재현돼서 "가끔"으로 보고됨). 0으로 끊어서 이 칸이 항상 grid 트랙 너비만큼만
+     차지하게 한다. */
+  .feature-side-col{display:flex;flex-direction:column;gap:20px;min-width:0;}
   .thumb{
     display:block;border-radius:14px;aspect-ratio:16/9;
     background:linear-gradient(135deg,#c9822f,#7a3418 60%,#3a1408);
