@@ -891,15 +891,23 @@ async function refreshTimelineForPost(supabase, post) {
     '(단순 후속보도·중복·무관한 기사는 빼세요). 각각을 한국어 한 문장으로 짧게 요약하세요' +
     '(날짜는 이미 있으니 요약 문장에 다시 쓰지 마세요). ' +
     '반드시 다음 JSON 형식으로만 답하세요: {"picked":[{"index":0,"summary":"..."}]}';
-  const answer = await callTimelineLLM(prompt, { json: true, temperature: 0.1, maxTokens: 700 });
-
-  let picked = [];
-  if (answer) {
+  // Cloudflare의 양자화(fp8) 모델은 가끔 API 호출 자체는 성공하면서 응답 내용이 반복
+  // 토큰으로 붕괴돼(JSON이 아닌 쓰레기 텍스트) 나올 때가 있다 -- callTimelineLLM의 폴백은
+  // "호출 실패(null)"만 잡고 "호출은 됐는데 못 쓰는 응답"은 못 잡아서, 후보가 멀쩡히 있어도
+  // 조용히 0건으로 끝나는 원인이 됐다(실측: post 7, 후보 18개인데 picked가 빈 배열). JSON
+  // 파싱이 깨지면 폴백 LLM(callLLM)으로 한 번 더 시도한다.
+  const parsePicks = (raw) => {
+    if (!raw) return null;
     try {
-      const parsed = JSON.parse(answer);
-      picked = Array.isArray(parsed.picked) ? parsed.picked : [];
-    } catch { /* picked는 빈 배열로 남음 */ }
-  }
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed.picked) ? parsed.picked : null;
+    } catch {
+      return null;
+    }
+  };
+  let picked = parsePicks(await callTimelineLLM(prompt, { json: true, temperature: 0.1, maxTokens: 700 }));
+  if (picked === null) picked = parsePicks(await callLLM(prompt, { json: true, temperature: 0.1, maxTokens: 700 }));
+  if (picked === null) picked = [];
 
   const rows = [];
   for (const p of picked) {
