@@ -670,7 +670,10 @@ async function tlExtractTopic(title, llmFn) {
     '다음은 오늘 올라온 기사 제목입니다. 이 기사가 다루는 오늘자 세부 사실이 아니라, ' +
     '이 기사가 속한 더 큰 사건·이슈 자체를 뉴스 검색에 쓸 짧은 구절(5단어 이내)로 뽑으세요 ' +
     '(예: "OO 씨 구속 중 특혜 논란"이 아니라 "OO 씨 구속"). 다른 설명 없이 검색어만 답하세요.\n\n제목: ' + title;
-  const answer = await (llmFn || callLLM)(prompt, { maxTokens: 30 });
+  // temperature를 낮게 고정 -- 기본값(높음)으로 두면 같은 제목도 호출마다 "尹 구속"처럼
+  // 넓게 뽑힐 때가 있고 "尹 영치금"처럼 좁게 뽑힐 때가 있어서, 실제로는 배경 보도가 널려
+  // 있는 사건인데도 운 나쁘게 좁게 뽑힌 호출에서는 후보가 하나도 안 걸리는 걸 실측으로 확인함.
+  const answer = await (llmFn || callLLM)(prompt, { maxTokens: 30, temperature: 0.1 });
   if (answer === null) return title;
   const extracted = answer.trim().replace(/^["']|["']$/g, '');
   return extracted || title;
