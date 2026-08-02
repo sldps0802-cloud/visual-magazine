@@ -659,6 +659,22 @@ async function wcExtractTopic(title, llmFn) {
   const extracted = answer.trim().replace(/^["']|["']$/g, '');
   return extracted || title;
 }
+// 타임라인 전용 주제 추출. wcExtractTopic은 "오늘 이 구체적인 사실을 누가 같이
+// 다뤘나"를 찾는 world-coverage용이라 일부러 좁게(예: "영치금 17억") 뽑는다 -- 그
+// 좁은 문구로 과거 구간을 검색하면, 정작 그 사건의 배경이 되는 더 큰 흐름(예: "윤석열
+// 구속")은 몇 년째 계속 보도돼 왔어도 오늘 기사 특유의 세부 사실과 문구가 안 겹쳐서
+// 전혀 안 잡힌다. 타임라인은 반대로 "이 기사가 속한 더 큰 사건"을 뽑아야 과거 보도가
+// 걸린다.
+async function tlExtractTopic(title, llmFn) {
+  const prompt =
+    '다음은 오늘 올라온 기사 제목입니다. 이 기사가 다루는 오늘자 세부 사실이 아니라, ' +
+    '이 기사가 속한 더 큰 사건·이슈 자체를 뉴스 검색에 쓸 짧은 구절(5단어 이내)로 뽑으세요 ' +
+    '(예: "OO 씨 구속 중 특혜 논란"이 아니라 "OO 씨 구속"). 다른 설명 없이 검색어만 답하세요.\n\n제목: ' + title;
+  const answer = await (llmFn || callLLM)(prompt, { maxTokens: 30 });
+  if (answer === null) return title;
+  const extracted = answer.trim().replace(/^["']|["']$/g, '');
+  return extracted || title;
+}
 async function wcFetchMarket(searchQuery, verifyTitle, market, keywords) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 8000);
@@ -830,7 +846,7 @@ async function refreshTimelineForPost(supabase, post) {
     .select('post_id').eq('post_id', post.id).maybeSingle();
   if (existingStatus) return false;
 
-  const topic = await wcExtractTopic(rawTitle, callTimelineLLM);
+  const topic = await tlExtractTopic(rawTitle, callTimelineLLM);
   const anchorDate = new Date(post.created_at).toISOString().slice(0, 10);
 
   const perSlot = await Promise.all(
