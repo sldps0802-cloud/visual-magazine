@@ -525,6 +525,17 @@ function wcParseXml(xmlText) {
     return [];
   }
 }
+// 구글 뉴스가 <source>에 실제 기사를 쓴 언론사 대신 포털(다음/네이버 등, 여러 언론사
+// 기사를 그러모아 보여주기만 하는 곳) 도메인을 돌려줄 때가 있다(실사용 보고: "엇갈린
+// 시선"에 "v.daum.net"이 마치 그 기사를 쓴 언론사처럼 표시됨). 포털 재게시 링크만으로는
+// 원 언론사를 알아낼 방법이 없으니, 틀린 언론사명을 보여주느니 아예 후보에서 뺀다 --
+// world-coverage(엇갈린 시선)와 timeline(타임라인) 둘 다 구글 뉴스 <source>를 그대로
+// 쓰므로 같이 걸러야 한다.
+const _PORTAL_SOURCES = ['daum', 'naver', 'nate.com', 'msn.com', 'yahoo', 'flipboard', 'news.google'];
+function wcIsPortalSource(source) {
+  const s = (source || '').toLowerCase();
+  return _PORTAL_SOURCES.some((p) => s.includes(p));
+}
 function wcStripSourceSuffix(title, source) {
   // 구글 뉴스 제목은 관례적으로 끝에 " - 언론사명"이 붙는데, source를 따로 보여줄 거라 중복이라 제거
   if (!source) return title;
@@ -752,6 +763,7 @@ async function refreshCoverageForPost(supabase, post) {
 
   const newRows = [];
   for (const { item, market } of deduped) {
+    if (wcIsPortalSource(item.source)) continue;
     const cleanTitle = wcStripSourceSuffix(item.title, item.source);
     const source = item.source || market.label;
     if (alreadyStored.has(dedupeKey(source, cleanTitle))) continue;
@@ -939,7 +951,11 @@ async function refreshTimelineForPost(supabase, post) {
       post_id: post.id,
       event_date: eventDate,
       summary: String(p.summary || c.item.title).slice(0, 200),
-      source: c.item.source || null,
+      // 포털(다음/네이버 등) 도메인이 <source>로 잡히면 사건 자체는 유효해도 "언론사가
+      // 이렇게 보도했다"는 틀린 표시가 되니, 후보를 버리는 대신 출처 이름만 비운다(사건은
+      // 살리되 잘못된 언론사 귀속만 막음 -- world-coverage와 달리 여기선 "누가 다뤘나"가
+      // 핵심이 아니라 "그런 일이 있었나"가 핵심이라 후보를 통째로 뺄 필요는 없다).
+      source: wcIsPortalSource(c.item.source) ? null : (c.item.source || null),
       source_url: /^https?:\/\//i.test(c.item.link || '') ? c.item.link : null,
       is_current: false,
     });
