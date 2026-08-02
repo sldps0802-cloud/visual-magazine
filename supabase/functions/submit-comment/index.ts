@@ -499,7 +499,13 @@ async function wcTranslate(text, targetLang) {
   try {
     const r = await fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text) + '&langpair=' + srcLang + '|' + targetLang, { signal: ctrl.signal });
     const data = await r.json();
-    return data?.responseData?.translatedText || text;
+    // 무료 일일 한도를 넘으면 HTTP 200으로 응답하면서 translatedText 자리에 "MYMEMORY
+    // WARNING: ..." 경고 문구를 그대로 채워준다(실측: 이게 그대로 언론사 기사 제목인 것처럼
+    // 저장·노출되는 사고 발생) -- quotaFinished 플래그를 믿었더니 실제 이 상황에서도
+    // false로 나와서(실측) 안 걸러졌다. 문구 자체를 직접 검사해 걸러내고 원문을 그대로 쓴다.
+    const translated = data?.responseData?.translatedText || '';
+    if (!translated || data?.quotaFinished || /^MYMEMORY WARNING/i.test(translated)) return text;
+    return translated;
   } catch {
     return text;
   } finally {
@@ -761,12 +767,31 @@ async function refreshCoverageForPost(supabase, post) {
   const dedupeKey = (source, title) => (source || '').toLowerCase() + '|' + (title || '').toLowerCase().replace(/\s+/g, ' ').trim();
   const alreadyStored = new Set((existingRows || []).map((r) => dedupeKey(r.source, r.item_title)));
 
+  // 포털(다음/네이버 등) 도메인이 source로 잡혀도 그냥 빼지 않는다 -- 같은 검색 결과 안에
+  // 토씨 하나 안 다른 제목을 정상적인(포털이 아닌) 언론사가 낸 게 있으면, 포털이 그
+  // 기사를 그대로 재게시한 것뿐이므로 그 진짜 언론사명으로 바로잡는다(실측: "v.daum.net"과
+  // "한국부동산뉴스"가 완전히 같은 제목으로 같이 잡혔음).
+  const titleKey = (t) => t.toLowerCase().replace(/\s+/g, ' ').trim();
+  const realSourceByTitle = new Map();
+  for (const { item } of found) {
+    if (item.source && !wcIsPortalSource(item.source)) {
+      realSourceByTitle.set(titleKey(wcStripSourceSuffix(item.title, item.source)), item.source);
+    }
+  }
+
   const newRows = [];
+  const addedThisRun = new Set();
   for (const { item, market } of deduped) {
-    if (wcIsPortalSource(item.source)) continue;
+    let source = item.source || market.label;
+    if (wcIsPortalSource(source)) {
+      const resolved = realSourceByTitle.get(titleKey(wcStripSourceSuffix(item.title, item.source)));
+      if (!resolved) continue; // 같은 제목을 낸 실제 언론사를 못 찾으면 어쩔 수 없이 제외(틀린 이름보단 나음)
+      source = resolved;
+    }
     const cleanTitle = wcStripSourceSuffix(item.title, item.source);
-    const source = item.source || market.label;
-    if (alreadyStored.has(dedupeKey(source, cleanTitle))) continue;
+    const key = dedupeKey(source, cleanTitle);
+    if (alreadyStored.has(key) || addedThisRun.has(key)) continue;
+    addedThisRun.add(key);
     // 한국어 화면에 보여줄 거라 원문이 외국어면 한국어로 번역해서 저장 (원문은 링크로 확인 가능)
     const displayTitle = market.lang !== 'ko' ? await wcTranslate(cleanTitle, 'ko') : cleanTitle;
     newRows.push({
@@ -886,16 +911,29 @@ async function refreshTimelineForPost(supabase, post) {
   );
   const found = perSlot.flat();
 
-  // 제목 기준 중복 제거 -- 같은 사건을 여러 매체·언어권이 동시에 다뤘을 수 있음
-  const seen = new Set();
-  const deduped = [];
+  // 포털(다음/네이버 등) 도메인이 source로 잡혀도 그냥 비우지 않는다 -- 같은 검색 결과 안에
+  // 토씨 하나 안 다른 제목을 정상적인(포털이 아닌) 언론사가 낸 게 있으면, 포털이 그 기사를
+  // 그대로 재게시한 것뿐이므로 그 진짜 언론사명으로 바로잡는다(world-coverage와 동일 원리).
+  const tlTitleKey = (t) => t.toLowerCase().replace(/\s+/g, ' ').trim();
+  const tlRealSourceByTitle = new Map();
+  for (const entry of found) {
+    if (entry.item.source && !wcIsPortalSource(entry.item.source)) {
+      tlRealSourceByTitle.set(tlTitleKey(entry.item.title), entry.item.source);
+    }
+  }
+
+  // 제목 기준 중복 제거 -- 같은 사건을 여러 매체·언어권이 동시에 다뤘을 수 있음. 포털과
+  // 진짜 언론사가 같은 제목으로 같이 잡히면 진짜 언론사 쪽을 남긴다(정렬 순서에 기대지 않음).
+  const seen = new Map();
   for (const entry of found) {
     if (!entry.item.title || !entry.item.pubDate) continue;
-    const key = entry.item.title.toLowerCase().replace(/\s+/g, ' ').trim();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    deduped.push(entry);
+    const key = tlTitleKey(entry.item.title);
+    const existing = seen.get(key);
+    if (!existing || (wcIsPortalSource(existing.item.source) && !wcIsPortalSource(entry.item.source))) {
+      seen.set(key, entry);
+    }
   }
+  const deduped = Array.from(seen.values());
 
   // 후보가 너무 적으면(진짜 배경사건이 없거나 검색이 안 걸림) LLM 호출 없이 "없음"으로 기록하고
   // 끝낸다 -- 억지로 타임라인을 채우는 것보다, 자신 없으면 아예 안 보여주는 게 낫다.
@@ -951,11 +989,12 @@ async function refreshTimelineForPost(supabase, post) {
       post_id: post.id,
       event_date: eventDate,
       summary: String(p.summary || c.item.title).slice(0, 200),
-      // 포털(다음/네이버 등) 도메인이 <source>로 잡히면 사건 자체는 유효해도 "언론사가
-      // 이렇게 보도했다"는 틀린 표시가 되니, 후보를 버리는 대신 출처 이름만 비운다(사건은
-      // 살리되 잘못된 언론사 귀속만 막음 -- world-coverage와 달리 여기선 "누가 다뤘나"가
-      // 핵심이 아니라 "그런 일이 있었나"가 핵심이라 후보를 통째로 뺄 필요는 없다).
-      source: wcIsPortalSource(c.item.source) ? null : (c.item.source || null),
+      // 포털(다음/네이버 등) 도메인이 <source>로 잡히면 위 dedup에서 이미 같은 제목의
+      // 진짜 언론사 쪽으로 대체됐을 것이다 -- 그래도 여전히 포털이면(같은 제목을 낸 실제
+      // 언론사를 못 찾은 경우) 사건 자체는 살리고 출처 이름만 비운다(틀린 귀속보다 무출처가 낫다).
+      source: wcIsPortalSource(c.item.source)
+        ? (tlRealSourceByTitle.get(tlTitleKey(c.item.title)) || null)
+        : (c.item.source || null),
       source_url: /^https?:\/\//i.test(c.item.link || '') ? c.item.link : null,
       is_current: false,
     });
